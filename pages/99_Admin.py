@@ -3,6 +3,7 @@ import database
 import pandas as pd
 import datetime
 import utils
+import bcrypt
 # --- Guarda de Autenticação ---
 profile, user_id, username = utils.check_authentication()
 
