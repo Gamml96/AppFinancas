@@ -178,21 +178,11 @@ def main():
         else:
             st.error("Erro ao carregar perfil do usuário.")
     else:
-        # Lógica de Login/Cadastro
-        choice = st.selectbox("Escolha uma ação:", ["Login", "Criar Conta"])
-        if choice == 'Criar Conta':
-            st.subheader("Crie sua nova conta")
-            try:
-                if authenticator.register_user('Criar conta', preauthorization=False, fields={'Form name': 'Formulário de Cadastro', 'Username': 'Nome de usuário', 'Name': 'Nome completo', 'Email': 'E-mail', 'Password': 'Senha', 'Repeat Password': 'Repita a senha', 'Register': 'Criar conta'}):
-                    st.success('Usuário criado com sucesso! Por favor, selecione "Login" para entrar.')
-            except Exception as e:
-                st.error(e)
-        elif choice == 'Login':
-            authenticator.login(fields={'Form name': 'Login'})
-            if st.session_state.get("authentication_status") is False:
-                st.error("Usuário ou senha incorretos.")
-            elif st.session_state.get("authentication_status") is None:
-                st.warning("Por favor, insira seu usuário e senha.")
+        authenticator.login(fields={'Form name': 'Login'})
+        if st.session_state.get("authentication_status") is False:
+            st.error("Usuário ou senha incorretos.")
+        elif st.session_state.get("authentication_status") is None:
+            st.warning("Por favor, insira seu usuário e senha.")
 
 if __name__ == "__main__":
     main()
