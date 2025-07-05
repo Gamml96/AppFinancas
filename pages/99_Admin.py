@@ -107,3 +107,49 @@ with col2:
             st.rerun()
         else:
             st.info("Nenhum usuário selecionado para exclusão.")
+
+# --- INÍCIO DA NOVA SEÇÃO: ADICIONAR NOVO USUÁRIO ---
+st.markdown("---")
+st.markdown("### Adicionar Novo Usuário")
+
+with st.form("form_add_user"):
+    st.write("Preencha os dados para criar um novo usuário.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        new_username = st.text_input("Nome de usuário (para login)")
+        new_name = st.text_input("Nome completo")
+        new_email = st.text_input("Email")
+    with col2:
+        new_password = st.text_input("Senha", type="password")
+        confirm_password = st.text_input("Confirmar Senha", type="password")
+        is_admin = st.checkbox("Este usuário será administrador?")
+
+    submitted = st.form_submit_button("Adicionar Usuário")
+
+    if submitted:
+        if not all([new_username, new_name, new_password, confirm_password]):
+            st.warning("Por favor, preencha todos os campos.")
+        elif new_password != confirm_password:
+            st.error("As senhas não conferem.")
+        else:
+            try:
+                # Criptografa a senha antes de enviar para o banco de dados
+                password_bytes = new_password.encode('utf-8')
+                hashed_bytes = bcrypt.hashpw(password_bytes, bcrypt.gensalt())
+                hashed_password_str = hashed_bytes.decode('utf-8')
+
+                # Reutiliza a função add_user que já existe
+                database.add_user(
+                    username=new_username,
+                    name=new_name,
+                    email=new_email,
+                    hashed_password=hashed_password_str,
+                    is_admin=is_admin
+                )
+                st.success(f"Usuário '{new_username}' criado com sucesso!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Ocorreu um erro ao criar o usuário: {e}")
+
+# --- FIM DA NOVA SEÇÃO ---
