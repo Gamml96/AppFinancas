@@ -1,32 +1,58 @@
-# database.py (versão final e completa para Turso)
+# database.py (versão final e completa para PostgreSQL/Supabase)
 import streamlit as st
 import datetime
 from dateutil.relativedelta import relativedelta
 import bcrypt
-import libsql_client
+import psycopg2
+import psycopg2.extras
 
-# database.py
-
-# --- FUNÇÃO CENTRAL DE CONEXÃO (VERSÃO CORRETA E FINAL) ---
-def _get_turso_client():
-    """
-    Cria e retorna um cliente de conexão com o Turso usando
-    a URL HTTPS diretamente, o que força um modo de conexão síncrono
-    compatível com o Streamlit.
-    """
+# --- FUNÇÃO CENTRAL DE CONEXÃO ---
+def _get_db_connection():
+    """Cria e retorna uma conexão com o banco de dados PostgreSQL."""
     try:
-        url = st.secrets["turso"]["url"]
-        auth_token = st.secrets["turso"]["auth_token"]
-        
-        # A URL https:// é passada diretamente, sem nenhuma modificação.
-        # Esta é a forma correta de forçar a conexão síncrona.
-        return libsql_client.create_client(url=url, auth_token=auth_token)
-
+        conn = psycopg2.connect(
+            host=st.secrets["postgres"]["host"],
+            port=st.secrets["postgres"]["port"],
+            dbname=st.secrets["postgres"]["dbname"],
+            user=st.secrets["postgres"]["user"],
+            password=st.secrets["postgres"]["password"]
+        )
+        return conn
     except Exception as e:
-        st.error(f"Erro ao conectar com o banco de dados Turso: {e}")
+        st.error(f"Erro ao conectar com o banco de dados: {e}")
         st.stop()
 
-# -------- Funções Auxiliares (sem conexão com BD) --------
+# --- FUNÇÃO CENTRAL DE EXECUÇÃO DE QUERIES ---
+def _execute_query(query, params=None, fetch=None, commit=False, executemany_params=None):
+    """
+    Executa uma query no banco de dados de forma segura e centralizada.
+    """
+    conn = _get_db_connection()
+    result = None
+    try:
+        with conn.cursor() as cur:
+            if executemany_params:
+                psycopg2.extras.execute_values(cur, query, executemany_params)
+            else:
+                cur.execute(query, params)
+
+            if fetch == 'one':
+                result = cur.fetchone()
+            elif fetch == 'all':
+                result = cur.fetchall()
+            
+            if commit:
+                conn.commit()
+    except Exception as e:
+        st.error(f"Erro de banco de dados: {e}")
+        # Em caso de erro, desfaz a transação
+        conn.rollback()
+    finally:
+        conn.close()
+    
+    return result
+
+# --- Funções Auxiliares (sem conexão com BD, permanecem as mesmas) ---
 def _ajustar_data_para_sexta_anterior(data_obj):
     if data_obj.weekday() == 5: return data_obj - datetime.timedelta(days=1)
     if data_obj.weekday() == 6: return data_obj - datetime.timedelta(days=2)
@@ -46,183 +72,149 @@ def _calcular_vencimento_credito(data_compra_obj, dia_vencimento, dias_fechament
 
 # -------- Usuários --------
 def add_user(username, name, email, hashed_password, is_admin=False):
-    with _get_turso_client() as client:
-        client.execute(
-            "INSERT INTO users (username, name, email, password, is_admin) VALUES (?, ?, ?, ?, ?)",
-            [username, name, email, hashed_password, int(is_admin)]
-        )
-        user_res = client.execute("SELECT user_id FROM users WHERE username = ?", [username])
-        user_id = user_res.rows[0][0]
-        ativos_padrao_res = client.execute("SELECT tipo_id, codigo, descricao FROM ativos_padrao")
-        if ativos_padrao_res.rows:
-            batch = client.batch()
-            for tipo_id, codigo, descricao in ativos_padrao_res.rows:
-                batch.add_execute("INSERT INTO investimentos (user_id, tipo_id, codigo, descricao) VALUES (?, ?, ?, ?)", [user_id, tipo_id, codigo, descricao])
-            client.run_batch(batch)
+    conn = _get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO users (username, name, email, password, is_admin) VALUES (%s, %s, %s, %s, %s) RETURNING user_id", (username, name, email, hashed_password, is_admin))
+            user_id = cur.fetchone()[0]
+            cur.execute("SELECT tipo_id, codigo, descricao FROM ativos_padrao")
+            ativos_padrao = cur.fetchall()
+            if ativos_padrao:
+                dados_para_inserir = [(user_id, tipo_id, codigo, descricao) for tipo_id, codigo, descricao in ativos_padrao]
+                psycopg2.extras.execute_values(cur, "INSERT INTO investimentos (user_id, tipo_id, codigo, descricao) VALUES %s", dados_para_inserir)
+        conn.commit()
+    finally:
+        conn.close()
     st.cache_data.clear()
 
 @st.cache_data
 def get_all_users():
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT user_id, username, name, email, is_admin FROM users")
-        return rs.rows
+    return _execute_query("SELECT user_id, username, name, email, is_admin FROM users", fetch='all')
 
 @st.cache_data
 def is_user_admin(username):
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT is_admin FROM users WHERE username = ?", [username])
-        return rs.rows[0][0] == 1 if rs.rows else False
+    user = _execute_query("SELECT is_admin FROM users WHERE username = %s", (username,), fetch='one')
+    return user[0] if user else False
 
 @st.cache_data
 def get_user_profile(username):
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT user_id, name, email FROM users WHERE username = ?", [username])
-        if not rs.rows: return None
-        return {"user_id": rs.rows[0][0], "name": rs.rows[0][1], "email": rs.rows[0][2]}
+    user = _execute_query("SELECT user_id, name, email FROM users WHERE username = %s", (username,), fetch='one')
+    return {"user_id": user[0], "name": user[1], "email": user[2]} if user else None
 
 @st.cache_data
 def get_authenticator_credentials():
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT username, name, password FROM users")
-        return {"usernames": {u[0]: {"name": u[1], "password": u[2]} for u in rs.rows}}
+    users = _execute_query("SELECT username, name, password FROM users", fetch='all')
+    return {"usernames": {u[0]: {"name": u[1], "password": u[2]} for u in users}}
 
 def update_user_password(username, new_password):
     hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    with _get_turso_client() as client:
-        client.execute("UPDATE users SET password = ? WHERE username = ?", [hashed_password, username])
+    _execute_query("UPDATE users SET password = %s WHERE username = %s", (hashed_password, username), commit=True)
     st.cache_data.clear()
 
 def update_user_profile(username, new_name, new_email):
-    with _get_turso_client() as client:
-        client.execute("UPDATE users SET name = ?, email = ? WHERE username = ?", [new_name, new_email, username])
+    _execute_query("UPDATE users SET name = %s, email = %s WHERE username = %s", (new_name, new_email, username), commit=True)
     st.cache_data.clear()
 
 def update_user_admin_status(user_id, is_admin):
-    with _get_turso_client() as client:
-        client.execute("UPDATE users SET is_admin = ? WHERE user_id = ?", [int(is_admin), user_id])
+    _execute_query("UPDATE users SET is_admin = %s WHERE user_id = %s", (is_admin, user_id), commit=True)
     st.cache_data.clear()
 
 def delete_all_user_data(user_id, username):
-    with _get_turso_client() as client:
-        invest_ids_res = client.execute("SELECT investimento_id FROM investimentos WHERE user_id = ?", [user_id])
-        if invest_ids_res.rows:
-            delete_trans_batch = client.batch()
-            for row in invest_ids_res.rows:
-                delete_trans_batch.add_execute("DELETE FROM transacoes_investimento WHERE investimento_id = ?", [row[0]])
-            client.run_batch(delete_trans_batch)
-        batch = client.batch()
-        batch.add_execute("DELETE FROM receitas WHERE user_id = ?", [user_id])
-        batch.add_execute("DELETE FROM despesas WHERE user_id = ?", [user_id])
-        batch.add_execute("DELETE FROM categorias WHERE user_id = ?", [user_id])
-        batch.add_execute("DELETE FROM contas WHERE user_id = ?", [user_id])
-        batch.add_execute("DELETE FROM investimentos WHERE user_id = ?", [user_id])
-        batch.add_execute("DELETE FROM users WHERE user_id = ?", [user_id])
-        client.run_batch(batch)
+    _execute_query("DELETE FROM users WHERE user_id = %s", (user_id,), commit=True)
     st.cache_data.clear()
     
 def delete_user_financial_data(user_id):
-    with _get_turso_client() as client:
-        invest_ids_res = client.execute("SELECT investimento_id FROM investimentos WHERE user_id = ?", [user_id])
-        if invest_ids_res.rows:
-            delete_trans_batch = client.batch()
-            for row in invest_ids_res.rows:
-                delete_trans_batch.add_execute("DELETE FROM transacoes_investimento WHERE investimento_id = ?", [row[0]])
-            client.run_batch(delete_trans_batch)
-        batch = client.batch()
-        batch.add_execute("DELETE FROM receitas WHERE user_id = ?", [user_id])
-        batch.add_execute("DELETE FROM despesas WHERE user_id = ?", [user_id])
-        batch.add_execute("DELETE FROM categorias WHERE user_id = ?", [user_id])
-        batch.add_execute("DELETE FROM contas WHERE user_id = ?", [user_id])
-        batch.add_execute("DELETE FROM investimentos WHERE user_id = ?", [user_id])
-        client.run_batch(batch)
+    queries = [
+        "DELETE FROM receitas WHERE user_id = %s",
+        "DELETE FROM despesas WHERE user_id = %s",
+        "DELETE FROM categorias WHERE user_id = %s",
+        "DELETE FROM investimentos WHERE user_id = %s",
+        "DELETE FROM contas WHERE user_id = %s"
+    ]
+    for query in queries:
+        _execute_query(query, (user_id,), commit=True)
     st.cache_data.clear()
 
 # -------- Contas --------
 def insert_conta(user_id, nome, vencimento, data_inicial, saldo_inicial, fechamento):
-    with _get_turso_client() as client:
-        client.execute("INSERT INTO contas (user_id, nome, vencimento, data_inicial, saldo_inicial, fechamento) VALUES (?, ?, ?, ?, ?, ?)", [user_id, nome, vencimento, data_inicial, float(saldo_inicial), fechamento])
+    query = "INSERT INTO contas (user_id, nome, vencimento, data_inicial, saldo_inicial, fechamento) VALUES (%s, %s, %s, %s, %s, %s)"
+    params = (user_id, nome, vencimento, data_inicial, float(saldo_inicial), fechamento)
+    _execute_query(query, params, commit=True)
     st.cache_data.clear()
 
 @st.cache_data
 def get_contas(user_id):
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT conta_id, nome, vencimento, data_inicial, saldo_inicial, fechamento FROM contas WHERE user_id = ?", [user_id])
-        return rs.rows
+    return _execute_query("SELECT conta_id, nome, vencimento, data_inicial, saldo_inicial, fechamento FROM contas WHERE user_id = %s", (user_id,), fetch='all')
 
 def update_conta(conta_id, user_id, nome, vencimento, data_inicial, saldo_inicial, fechamento):
-    with _get_turso_client() as client:
-        client.execute("UPDATE contas SET nome = ?, vencimento = ?, data_inicial = ?, saldo_inicial = ?, fechamento = ? WHERE conta_id = ? AND user_id = ?", [nome, vencimento, data_inicial, float(saldo_inicial), fechamento, conta_id, user_id])
+    query = "UPDATE contas SET nome = %s, vencimento = %s, data_inicial = %s, saldo_inicial = %s, fechamento = %s WHERE conta_id = %s AND user_id = %s"
+    params = (nome, vencimento, data_inicial, float(saldo_inicial), fechamento, conta_id, user_id)
+    _execute_query(query, params, commit=True)
     st.cache_data.clear()
 
 def delete_conta(conta_id, user_id):
-    with _get_turso_client() as client:
-        client.execute("DELETE FROM contas WHERE conta_id = ? AND user_id = ?", [conta_id, user_id])
+    _execute_query("DELETE FROM contas WHERE conta_id = %s AND user_id = %s", (conta_id, user_id), commit=True)
     st.cache_data.clear()
 
 # -------- Categorias --------
 def insert_categoria(user_id, tipo, nome):
-    with _get_turso_client() as client:
-        client.execute("INSERT INTO categorias (user_id, tipo, nome) VALUES (?, ?, ?)", [user_id, tipo, nome])
+    _execute_query("INSERT INTO categorias (user_id, tipo, nome) VALUES (%s, %s, %s) ON CONFLICT (user_id, tipo, nome) DO NOTHING", (user_id, tipo, nome), commit=True)
     st.cache_data.clear()
 
 @st.cache_data
 def get_categorias(user_id, tipo):
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT categoria_id, nome FROM categorias WHERE user_id = ? AND tipo = ?", [user_id, tipo])
-        return rs.rows
+    return _execute_query("SELECT categoria_id, nome FROM categorias WHERE user_id = %s AND tipo = %s", (user_id, tipo), fetch='all')
 
 def update_categoria(categoria_id, user_id, nome):
-     with _get_turso_client() as client:
-        client.execute("UPDATE categorias SET nome = ? WHERE categoria_id = ? AND user_id = ?", [nome, categoria_id, user_id])
-     st.cache_data.clear()
+    _execute_query("UPDATE categorias SET nome = %s WHERE categoria_id = %s AND user_id = %s", (nome, categoria_id, user_id), commit=True)
+    st.cache_data.clear()
 
 def delete_categoria(categoria_id, user_id):
-    with _get_turso_client() as client:
-        client.execute("DELETE FROM categorias WHERE categoria_id = ? AND user_id = ?", [categoria_id, user_id])
+    _execute_query("DELETE FROM categorias WHERE categoria_id = %s AND user_id = %s", (categoria_id, user_id), commit=True)
     st.cache_data.clear()
-    
-def get_or_create_categoria_despesa(user_id, nome_categoria):
+
+def get_or_create_categoria(user_id, nome_categoria, tipo):
     nome_cat_clean = nome_categoria.strip().capitalize()
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT nome FROM categorias WHERE user_id = ? AND lower(nome) = ? AND tipo = 'despesa'", [user_id, nome_cat_clean.lower()])
-        if rs.rows: return rs.rows[0][0]
-        client.execute("INSERT INTO categorias (user_id, tipo, nome) VALUES (?, 'despesa', ?)", [user_id, nome_cat_clean])
-    st.cache_data.clear()
-    return nome_cat_clean
+    query_select = "SELECT nome FROM categorias WHERE user_id = %s AND lower(nome) = %s AND tipo = %s"
+    result = _execute_query(query_select, (user_id, nome_cat_clean.lower(), tipo), fetch='one')
+    if result:
+        return result[0]
+    else:
+        query_insert = "INSERT INTO categorias (user_id, tipo, nome) VALUES (%s, %s, %s)"
+        _execute_query(query_insert, (user_id, tipo, nome_cat_clean), commit=True)
+        st.cache_data.clear()
+        return nome_cat_clean
+
+def get_or_create_categoria_despesa(user_id, nome_categoria):
+    return get_or_create_categoria(user_id, nome_categoria, 'despesa')
 
 def get_or_create_categoria_receita(user_id, nome_categoria):
-    nome_cat_clean = nome_categoria.strip().capitalize()
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT nome FROM categorias WHERE user_id = ? AND lower(nome) = ? AND tipo = 'receita'", [user_id, nome_cat_clean.lower()])
-        if rs.rows: return rs.rows[0][0]
-        client.execute("INSERT INTO categorias (user_id, tipo, nome) VALUES (?, 'receita', ?)", [user_id, nome_cat_clean])
-    st.cache_data.clear()
-    return nome_cat_clean
+    return get_or_create_categoria(user_id, nome_categoria, 'receita')
 
 # -------- Receitas --------
 def insert_receita(user_id, conta_id, data, valor, categoria, descricao):
-    with _get_turso_client() as client:
-        client.execute("INSERT INTO receitas (user_id, conta_id, data, valor, categoria, descricao) VALUES (?, ?, ?, ?, ?, ?)", [user_id, conta_id, data, float(valor), categoria, descricao])
+    query = "INSERT INTO receitas (user_id, conta_id, data, valor, categoria, descricao) VALUES (%s, %s, %s, %s, %s, %s)"
+    params = (user_id, conta_id, data, float(valor), categoria, descricao)
+    _execute_query(query, params, commit=True)
     st.cache_data.clear()
 
 @st.cache_data
 def get_receitas(user_id):
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT receita_id, conta_id, data, valor, categoria, descricao FROM receitas WHERE user_id = ?", [user_id])
-        return rs.rows
+    return _execute_query("SELECT receita_id, user_id, conta_id, data, valor, categoria, descricao FROM receitas WHERE user_id = %s", (user_id,), fetch='all')
 
 def update_receita(receita_id, user_id, conta_id, data, valor, categoria, descricao):
-    with _get_turso_client() as client:
-        client.execute("UPDATE receitas SET conta_id = ?, data = ?, valor = ?, categoria = ?, descricao = ? WHERE receita_id = ? AND user_id = ?", [conta_id, data, float(valor), categoria, descricao, receita_id, user_id])
+    query = "UPDATE receitas SET conta_id = %s, data = %s, valor = %s, categoria = %s, descricao = %s WHERE receita_id = %s AND user_id = %s"
+    params = (conta_id, data, float(valor), categoria, descricao, receita_id, user_id)
+    _execute_query(query, params, commit=True)
     st.cache_data.clear()
 
 def delete_receita(receita_id, user_id):
-    with _get_turso_client() as client:
-        client.execute("DELETE FROM receitas WHERE receita_id = ? AND user_id = ?", [receita_id, user_id])
+    _execute_query("DELETE FROM receitas WHERE receita_id = %s AND user_id = %s", (receita_id, user_id), commit=True)
     st.cache_data.clear()
 
 # -------- Despesas --------
 def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pagamento, parcelas, descricao):
+    # ... (lógica de cálculo de parcelas e vencimentos permanece a mesma) ...
     valor_total = float(valor)
     data_compra_obj = datetime.datetime.strptime(data_compra_str, "%Y-%m-%d").date()
     valor_parcela_padrao = round(valor_total / parcelas, 2)
@@ -230,144 +222,165 @@ def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pa
     valor_primeira_parcela = valor_parcela_padrao + diferenca
     grupo_id = int(datetime.datetime.now().timestamp() * 1000)
     
-    with _get_turso_client() as client:
-        if tipo_pagamento == 'crédito':
-            conta_res = client.execute("SELECT vencimento, fechamento FROM contas WHERE conta_id = ? AND user_id = ?", [conta_id, user_id])
-            if not conta_res.rows: raise ValueError("Conta de crédito não encontrada.")
-            dia_vencimento, dias_fechamento = conta_res.rows[0]
-            primeiro_vencimento = _calcular_vencimento_credito(data_compra_obj, dia_vencimento, dias_fechamento)
-        else: # débito
-            primeiro_vencimento = data_compra_obj
+    conn = _get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            if tipo_pagamento == 'crédito':
+                cur.execute("SELECT vencimento, fechamento FROM contas WHERE conta_id = %s AND user_id = %s", (conta_id, user_id))
+                conta_info = cur.fetchone()
+                if not conta_info: raise ValueError("Conta de crédito não encontrada.")
+                dia_vencimento, dias_fechamento = conta_info
+                primeiro_vencimento = _calcular_vencimento_credito(data_compra_obj, dia_vencimento, dias_fechamento)
+            else:
+                primeiro_vencimento = data_compra_obj
 
-        batch = client.batch()
-        for i in range(parcelas):
-            valor_a_inserir = valor_primeira_parcela if i == 0 else valor_parcela_padrao
-            vencimento_parcela = primeiro_vencimento + relativedelta(months=i)
-            descricao_parcela = f"{descricao} ({i+1}/{parcelas})" if parcelas > 1 else descricao
-            batch.add_execute("INSERT INTO despesas (user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao, parcela_grupo_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [user_id, conta_id, data_compra_str, vencimento_parcela.isoformat(), valor_a_inserir, categoria, tipo_pagamento, i + 1, descricao_parcela, grupo_id])
-        client.run_batch(batch)
+            dados_para_inserir = []
+            for i in range(parcelas):
+                valor_a_inserir = valor_primeira_parcela if i == 0 else valor_parcela_padrao
+                vencimento_parcela = primeiro_vencimento + relativedelta(months=i)
+                descricao_parcela = f"{descricao} ({i+1}/{parcelas})" if parcelas > 1 else descricao
+                dados_para_inserir.append((user_id, conta_id, data_compra_str, vencimento_parcela.isoformat(), valor_a_inserir, categoria, tipo_pagamento, i + 1, descricao_parcela, grupo_id))
+            
+            psycopg2.extras.execute_values(cur, "INSERT INTO despesas (user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao, parcela_grupo_id) VALUES %s", dados_para_inserir)
+        conn.commit()
+    finally:
+        conn.close()
     st.cache_data.clear()
 
 @st.cache_data
 def get_despesas(user_id):
-     with _get_turso_client() as client:
-        rs = client.execute("SELECT despesa_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao FROM despesas WHERE user_id = ?", [user_id])
-        return rs.rows
+    query = "SELECT despesa_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao FROM despesas WHERE user_id = %s"
+    return _execute_query(query, (user_id,), fetch='all')
+
+def update_despesa(despesa_id, user_id, conta_id, data_compra, data_vencimento, valor, categoria, descricao):
+    query = "UPDATE despesas SET conta_id = %s, data_compra = %s, data_vencimento = %s, valor = %s, categoria = %s, descricao = %s WHERE despesa_id = %s AND user_id = %s"
+    params = (conta_id, data_compra, data_vencimento, float(valor), categoria, descricao, despesa_id, user_id)
+    _execute_query(query, params, commit=True)
+    st.cache_data.clear()
+
+def delete_despesa(despesa_id, user_id):
+    _execute_query("DELETE FROM despesas WHERE despesa_id = %s AND user_id = %s", (despesa_id, user_id), commit=True)
+    st.cache_data.clear()
 
 # -------- Investimentos --------
 @st.cache_data
 def get_tipos_investimento():
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT tipo_id, nome FROM tipos_investimento ORDER BY nome")
-        return rs.rows
+    return _execute_query("SELECT tipo_id, nome FROM tipos_investimento ORDER BY nome", fetch='all')
 
 def add_investimento(user_id, tipo_id, codigo, descricao):
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT investimento_id FROM investimentos WHERE user_id = ? AND lower(codigo) = ?", [user_id, codigo.lower()])
-        if rs.rows: raise ValueError("Este ativo já está cadastrado.")
-        client.execute("INSERT INTO investimentos (user_id, tipo_id, codigo, descricao) VALUES (?, ?, ?, ?)", [user_id, tipo_id, codigo.upper(), descricao])
+    _execute_query("INSERT INTO investimentos (user_id, tipo_id, codigo, descricao) VALUES (%s, %s, %s, %s) ON CONFLICT (user_id, codigo) DO NOTHING", (user_id, tipo_id, codigo.upper(), descricao), commit=True)
     st.cache_data.clear()
 
+def get_or_create_investimento(user_id, codigo, tipo_nome, descricao=""):
+    codigo_upper = codigo.strip().upper()
+    conn = _get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT investimento_id FROM investimentos WHERE user_id = %s AND codigo = %s", (user_id, codigo_upper))
+            result = cur.fetchone()
+            if result:
+                return result[0]
+            else:
+                cur.execute("SELECT tipo_id FROM tipos_investimento WHERE lower(nome) = %s", (tipo_nome.lower(),))
+                tipo_result = cur.fetchone()
+                if not tipo_result:
+                    raise ValueError(f"O tipo de ativo '{tipo_nome}' não é válido.")
+                tipo_id = tipo_result[0]
+                cur.execute("INSERT INTO investimentos (user_id, tipo_id, codigo, descricao) VALUES (%s, %s, %s, %s) RETURNING investimento_id", (user_id, tipo_id, codigo_upper, descricao.strip()))
+                new_id = cur.fetchone()[0]
+                conn.commit()
+                st.cache_data.clear()
+                return new_id
+    finally:
+        conn.close()
+
 def add_transacao_investimento(investimento_id, tipo_transacao, data, quantidade, preco_unitario):
-    with _get_turso_client() as client:
-        client.execute("INSERT INTO transacoes_investimento (investimento_id, tipo_transacao, data, quantidade, preco_unitario) VALUES (?, ?, ?, ?, ?)", [investimento_id, tipo_transacao, data, quantidade, preco_unitario])
+    query = "INSERT INTO transacoes_investimento (investimento_id, tipo_transacao, data, quantidade, preco_unitario) VALUES (%s, %s, %s, %s, %s)"
+    params = (investimento_id, tipo_transacao, data, quantidade, preco_unitario)
+    _execute_query(query, params, commit=True)
     st.cache_data.clear()
 
 @st.cache_data
 def get_portfolio_consolidado(user_id):
-    with _get_turso_client() as client:
-        query = "SELECT i.codigo, i.descricao, ti.nome as tipo, SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) as quantidade_total, SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade * t.preco_unitario ELSE 0 END) / SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE 0 END) as preco_medio_compra FROM investimentos i JOIN transacoes_investimento t ON i.investimento_id = t.investimento_id JOIN tipos_investimento ti ON i.tipo_id = ti.tipo_id WHERE i.user_id = ? GROUP BY i.investimento_id HAVING quantidade_total > 0 ORDER BY i.codigo"
-        rs = client.execute(query, [user_id])
-        return rs.rows
+    query = """
+        SELECT
+            i.codigo, i.descricao, ti.nome as tipo,
+            SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) as quantidade_total,
+            SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade * t.preco_unitario ELSE 0 END) / NULLIF(SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE 0 END), 0) as preco_medio_compra
+        FROM investimentos i
+        JOIN transacoes_investimento t ON i.investimento_id = t.investimento_id
+        JOIN tipos_investimento ti ON i.tipo_id = ti.tipo_id
+        WHERE i.user_id = %s
+        GROUP BY i.investimento_id, i.codigo, i.descricao, ti.nome
+        HAVING SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) > 0
+        ORDER BY i.codigo
+    """
+    return _execute_query(query, (user_id,), fetch='all')
 
 @st.cache_data
 def get_investimentos_usuario(user_id):
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT investimento_id, codigo FROM investimentos WHERE user_id = ? ORDER BY codigo", [user_id])
-        return rs.rows
-
-def get_or_create_investimento(user_id, codigo, tipo_nome, descricao=""):
-    codigo_upper = codigo.strip().upper()
-    with _get_turso_client() as client:
-        rs = client.execute("SELECT investimento_id FROM investimentos WHERE user_id = ? AND codigo = ?", [user_id, codigo_upper])
-        if rs.rows: return rs.rows[0][0]
-        tipo_res = client.execute("SELECT tipo_id FROM tipos_investimento WHERE lower(nome) = ?", [tipo_nome.lower()])
-        if not tipo_res.rows: raise ValueError(f"O tipo de ativo '{tipo_nome}' não é válido.")
-        tipo_id = tipo_res.rows[0][0]
-        client.execute("INSERT INTO investimentos (user_id, tipo_id, codigo, descricao) VALUES (?, ?, ?, ?)", [user_id, tipo_id, codigo_upper, descricao.strip()])
-        id_res = client.execute("SELECT investimento_id FROM investimentos WHERE user_id = ? AND codigo = ?", [user_id, codigo_upper])
-    st.cache_data.clear()
-    return id_res.rows[0][0]
+    return _execute_query("SELECT investimento_id, codigo FROM investimentos WHERE user_id = %s ORDER BY codigo", (user_id,), fetch='all')
 
 @st.cache_data
 def get_all_transacoes(user_id):
-    with _get_turso_client() as client:
-        query = "SELECT t.transacao_id, i.codigo, t.tipo_transacao, t.data, t.quantidade, t.preco_unitario FROM transacoes_investimento t JOIN investimentos i ON t.investimento_id = i.investimento_id WHERE i.user_id = ? ORDER BY t.data DESC"
-        rs = client.execute(query, [user_id])
-        return rs.rows
+    query = "SELECT t.transacao_id, i.codigo, t.tipo_transacao, t.data, t.quantidade, t.preco_unitario FROM transacoes_investimento t JOIN investimentos i ON t.investimento_id = i.investimento_id WHERE i.user_id = %s ORDER BY t.data DESC"
+    return _execute_query(query, (user_id,), fetch='all')
 
 def update_transacao_investimento(transacao_id, data, quantidade, preco_unitario):
-    with _get_turso_client() as client:
-        client.execute("UPDATE transacoes_investimento SET data = ?, quantidade = ?, preco_unitario = ? WHERE transacao_id = ?", [data, quantidade, preco_unitario, transacao_id])
+    query = "UPDATE transacoes_investimento SET data = %s, quantidade = %s, preco_unitario = %s WHERE transacao_id = %s"
+    _execute_query(query, (data, quantidade, preco_unitario, transacao_id), commit=True)
     st.cache_data.clear()
 
 def delete_transacao_investimento(transacao_id):
-    with _get_turso_client() as client:
-        client.execute("DELETE FROM transacoes_investimento WHERE transacao_id = ?", [transacao_id])
+    _execute_query("DELETE FROM transacoes_investimento WHERE transacao_id = %s", (transacao_id,), commit=True)
     st.cache_data.clear()
-
+    
 # -------- Relatórios e Consolidações --------
 @st.cache_data
-def get_proximos_lancamentos(user_id, dias_futuros=3):
-    lancamentos = []
+def get_proximos_lancamentos(user_id, dias_futuros=7):
+    query = """
+        (SELECT data, descricao, valor, 'receita' as tipo FROM receitas WHERE user_id = %s AND data BETWEEN %s AND %s)
+        UNION ALL
+        (SELECT data_vencimento, descricao, valor, 'despesa' as tipo FROM despesas WHERE user_id = %s AND data_vencimento BETWEEN %s AND %s)
+        ORDER BY data
+    """
     today = datetime.date.today()
     end_date = today + datetime.timedelta(days=dias_futuros)
-    with _get_turso_client() as client:
-        receitas_res = client.execute("SELECT data, descricao, valor, 'receita' as tipo FROM receitas WHERE user_id = ? AND data BETWEEN ? AND ?", [user_id, today.isoformat(), end_date.isoformat()])
-        lancamentos.extend(receitas_res.rows)
-        despesas_res = client.execute("SELECT data_vencimento, descricao, valor, 'despesa' as tipo FROM despesas WHERE user_id = ? AND data_vencimento BETWEEN ? AND ?", [user_id, today.isoformat(), end_date.isoformat()])
-        lancamentos.extend(despesas_res.rows)
-    lancamentos.sort(key=lambda x: x[0])
-    return lancamentos
+    params = (user_id, today.isoformat(), end_date.isoformat(), user_id, today.isoformat(), end_date.isoformat())
+    return _execute_query(query, params, fetch='all')
 
 @st.cache_data
 def get_despesas_por_categoria(user_id, dt_start, dt_end):
-    with _get_turso_client() as client:
-        query = "SELECT categoria, SUM(valor) FROM despesas WHERE user_id = ? AND data_vencimento BETWEEN ? AND ? GROUP BY categoria ORDER BY SUM(valor) DESC"
-        rs = client.execute(query, [user_id, dt_start, dt_end])
-        return rs.rows
+    query = "SELECT categoria, SUM(valor) FROM despesas WHERE user_id = %s AND data_vencimento BETWEEN %s AND %s GROUP BY categoria ORDER BY SUM(valor) DESC"
+    return _execute_query(query, (user_id, dt_start, dt_end), fetch='all')
 
 @st.cache_data
 def get_total_receitas_mensal(user_id):
-    with _get_turso_client() as client:
-        query = "SELECT strftime('%Y-%m', data) as mes, SUM(valor) FROM receitas WHERE user_id = ? GROUP BY mes ORDER BY mes"
-        rs = client.execute(query, [user_id])
-        return rs.rows
+    query = "SELECT TO_CHAR(data, 'YYYY-MM') as mes, SUM(valor) FROM receitas WHERE user_id = %s GROUP BY mes ORDER BY mes"
+    return _execute_query(query, (user_id,), fetch='all')
 
 @st.cache_data
 def get_total_despesas_mensal(user_id):
-    with _get_turso_client() as client:
-        query = "SELECT strftime('%Y-%m', data_vencimento) as mes, SUM(valor) FROM despesas WHERE user_id = ? GROUP BY mes ORDER BY mes"
-        rs = client.execute(query, [user_id])
-        return rs.rows
+    query = "SELECT TO_CHAR(data_vencimento, 'YYYY-MM') as mes, SUM(valor) FROM despesas WHERE user_id = %s GROUP BY mes ORDER BY mes"
+    return _execute_query(query, (user_id,), fetch='all')
 
 @st.cache_data
 def get_fatura_cartao(user_id, conta_id, mes, ano):
     mes_ano_str = f"{ano:04d}-{mes:02d}"
-    with _get_turso_client() as client:
-        query = "SELECT data_compra, descricao, valor FROM despesas WHERE user_id = ? AND conta_id = ? AND tipo_pagamento = 'crédito' AND strftime('%Y-%m', data_vencimento) = ? ORDER BY data_compra"
-        rs = client.execute(query, [user_id, conta_id, mes_ano_str])
-        return rs.rows
+    query = "SELECT data_compra, descricao, valor FROM despesas WHERE user_id = %s AND conta_id = %s AND tipo_pagamento = 'crédito' AND TO_CHAR(data_vencimento, 'YYYY-MM') = %s ORDER BY data_compra"
+    return _execute_query(query, (user_id, conta_id, mes_ano_str), fetch='all')
 
 @st.cache_data
 def get_transacoes_consolidadas(user_id):
+    conn = _get_db_connection()
     transacoes = []
-    with _get_turso_client() as client:
-        receitas_res = client.execute("SELECT data, descricao, valor FROM receitas WHERE user_id = ?", [user_id])
-        for data, desc, val in receitas_res.rows: transacoes.append((data, desc, val))
-        despesas_res = client.execute("SELECT data_vencimento, descricao, valor FROM despesas WHERE user_id = ?", [user_id])
-        for data, desc, val in despesas_res.rows: transacoes.append((data, desc, -val))
-        contas_res = client.execute("SELECT data_inicial, nome, saldo_inicial FROM contas WHERE user_id = ?", [user_id])
-        for data, nome, saldo in contas_res.rows:
+    with conn.cursor() as cur:
+        cur.execute("SELECT data, descricao, valor FROM receitas WHERE user_id = %s", (user_id,))
+        for data, desc, val in cur.fetchall(): transacoes.append((data, desc, val))
+        cur.execute("SELECT data_vencimento, descricao, valor FROM despesas WHERE user_id = %s", (user_id,))
+        for data, desc, val in cur.fetchall(): transacoes.append((data, desc, -val))
+        cur.execute("SELECT data_inicial, nome, saldo_inicial FROM contas WHERE user_id = %s", (user_id,))
+        for data, nome, saldo in cur.fetchall():
             if data and saldo > 0: transacoes.append((data, f"Saldo Inicial - {nome}", saldo))
+    conn.close()
     return transacoes
