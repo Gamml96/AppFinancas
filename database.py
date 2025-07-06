@@ -5,13 +5,22 @@ from dateutil.relativedelta import relativedelta
 import bcrypt
 import libsql_client
 
-# --- FUNÇÃO CENTRAL DE CONEXÃO ---
+# --- FUNÇÃO CENTRAL DE CONEXÃO (VERSÃO CORRIGIDA) ---
 def _get_turso_client():
-    """Cria e retorna um cliente de conexão com o Turso usando os segredos do Streamlit."""
+    """
+    Cria e retorna um cliente de conexão com o Turso usando
+    o esquema de URL correto para o ambiente Streamlit.
+    """
     try:
         url = st.secrets["turso"]["url"]
         auth_token = st.secrets["turso"]["auth_token"]
-        return libsql_client.create_client(url=url, auth_token=auth_token)
+        
+        # A MÁGICA ESTÁ AQUI:
+        # Troca 'https' por 'libsql' para o cliente, mantendo a conexão via HTTPS.
+        sync_url = url.replace("https://", "libsql://")
+
+        return libsql_client.create_client(url=sync_url, auth_token=auth_token)
+
     except Exception as e:
         st.error(f"Erro ao conectar com o banco de dados Turso: {e}")
         st.stop()
