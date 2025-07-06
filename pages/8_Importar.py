@@ -213,87 +213,74 @@ def processar_importacao_investimentos(df, user_id):
 contas = database.get_contas(user_id)
 st.title("Importar Transações")
 
-# Cria abas para organizar a importação
-tab_despesas, tab_receitas,tab_investimentos  = st.tabs(["Importar Despesas", "Importar Receitas", "Importar Investimentos"])
+tab_despesas, tab_receitas, tab_investimentos = st.tabs(["Importar Despesas", "Importar Receitas", "Importar Investimentos"])
 
 with tab_despesas:
     st.markdown("### 1. Baixe e Preencha o Template de Despesas")
     st.info("Use este modelo para importar suas despesas. **Os nomes das colunas não devem ser alterados.**")
     st.download_button(
         label="Baixar Template de Despesas",
-        data=gerar_template_csv_despesas(), # Função que já existia
+        data=gerar_template_csv_despesas(),
         file_name="template_despesas.csv",
         mime="text/csv",
     )
-
     st.markdown("---")
     st.markdown("### 2. Faça o Upload do Arquivo Preenchido")
-    
     uploaded_file_despesas = st.file_uploader("Escolha um arquivo CSV de despesas", type="csv", key="uploader_despesas")
-
     if uploaded_file_despesas is not None:
         try:
             df_upload = pd.read_csv(uploaded_file_despesas, sep=';')
             st.success("Arquivo de despesas carregado:")
-            st.dataframe(df_upload)
-
+            st.dataframe(df_upload.head())
             if st.button("Confirmar e Iniciar Importação de Despesas", type="primary"):
-                processar_importacao_despesas(df_upload, user_id, contas) # Chama a função renomeada
-                st.rerun()
+                processar_importacao_despesas(df_upload, user_id, contas)
+                # st.rerun() foi REMOVIDO
         except Exception as e:
-            st.error(f"Erro ao ler o arquivo de despesas: {e}. Verifique se ele está no formato CSV e usa ';' como separador.")
+            st.error(f"Erro ao ler o arquivo de despesas: {e}.")
 
 with tab_receitas:
     st.markdown("### 1. Baixe e Preencha o Template de Receitas")
     st.info("Use este modelo para importar suas receitas. **Os nomes das colunas não devem ser alterados.**")
     st.download_button(
         label="Baixar Template de Receitas",
-        data=gerar_template_csv_receitas(), # Nova função para template de receitas
+        data=gerar_template_csv_receitas(),
         file_name="template_receitas.csv",
         mime="text/csv",
     )
-
     st.markdown("---")
     st.markdown("### 2. Faça o Upload do Arquivo Preenchido")
-
     uploaded_file_receitas = st.file_uploader("Escolha um arquivo CSV de receitas", type="csv", key="uploader_receitas")
-
     if uploaded_file_receitas is not None:
         try:
             df_upload = pd.read_csv(uploaded_file_receitas, sep=';')
             st.success("Arquivo de receitas carregado. Veja uma prévia:")
             st.dataframe(df_upload.head())
-
             if st.button("Confirmar e Iniciar Importação de Receitas", type="primary", key="btn_import_receitas"):
-                processar_importacao_receitas(df_upload, user_id, contas) # Chama a nova função de receitas
-                st.rerun()
-        
+                processar_importacao_receitas(df_upload, user_id, contas)
+                # st.rerun() foi REMOVIDO
         except Exception as e:
-            st.error(f"Erro ao ler o arquivo de receitas: {e}. Verifique se ele está no formato CSV e usa ';' como separador.")
+            st.error(f"Erro ao ler o arquivo de receitas: {e}.")
 
 with tab_investimentos:
     st.markdown("### 1. Baixe e Preencha o Template de Investimentos")
-    st.info("Use este modelo para importar suas transações de compra e venda. **Os ativos já devem estar cadastrados na página de Investimentos.**")
+    # Pequeno ajuste no texto para refletir a nova funcionalidade
+    st.info("Use este modelo para importar suas transações. Ativos não encontrados serão cadastrados automaticamente.")
     st.download_button(
         label="Baixar Template de Investimentos",
         data=gerar_template_csv_investimentos(),
         file_name="template_investimentos.csv",
         mime="text/csv",
     )
-
     st.markdown("---")
     st.markdown("### 2. Faça o Upload do Arquivo Preenchido")
-    
     uploaded_file_investimentos = st.file_uploader("Escolha um arquivo CSV de investimentos", type="csv", key="uploader_investimentos")
-
     if uploaded_file_investimentos is not None:
         try:
             df_upload = pd.read_csv(uploaded_file_investimentos, sep=';')
             st.success("Arquivo de investimentos carregado:")
             st.dataframe(df_upload.head())
-
-            if st.button("Confirmar e Iniciar Importação de Investimentos", type="primary"):
+            if st.button("Confirmar e Iniciar Importação de Investimentos", type="primary", key="btn_import_inv"):
                 processar_importacao_investimentos(df_upload, user_id)
-                st.rerun()
+                # st.rerun() foi REMOVIDO
         except Exception as e:
-            st.error(f"Erro ao ler o arquivo de investimentos: {e}. Verifique se ele está no formato CSV e usa ';' como separador.")
+            st.error(f"Erro ao ler o arquivo de investimentos: {e}.")
