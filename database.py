@@ -11,25 +11,16 @@ from dotenv import load_dotenv
 # --- FUNÇÃO CENTRAL DE CONEXÃO ---
 def _get_db_connection():
     """
-    Cria uma conexão com o banco de dados. Tenta usar os segredos do Streamlit primeiro
-    (para o app na nuvem) e, se falhar, usa as variáveis de ambiente de um arquivo .env
-    (para scripts locais).
+    Cria uma conexão com o banco de dados PostgreSQL usando a URI de pooling,
+    que é o método mais robusto para ambientes como o Streamlit Cloud.
     """
     try:
-        # Tenta o método do Streamlit Cloud
-        conn = psycopg2.connect(**st.secrets["postgres"])
+        # Conecta usando a URI de pooling completa, que está nos segredos
+        conn = psycopg2.connect(st.secrets["postgres"]["connection_uri"])
         return conn
-    except Exception:
-        # Se falhar, tenta o método local com o arquivo .env
-        load_dotenv()
-        conn = psycopg2.connect(
-            host=os.getenv("PG_HOST"),
-            port=os.getenv("PG_PORT"),
-            dbname=os.getenv("PG_DBNAME"),
-            user=os.getenv("PG_USER"),
-            password=os.getenv("PG_PASSWORD")
-        )
-        return conn
+    except Exception as e:
+        st.error(f"Erro ao conectar com o banco de dados: {e}")
+        st.stop()
 
 # --- FUNÇÃO CENTRAL DE EXECUÇÃO DE QUERIES ---
 def _execute_query(query, params=None, fetch=None, commit=False, executemany_params=None):
