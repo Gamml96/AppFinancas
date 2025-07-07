@@ -149,7 +149,7 @@ def render_home_page(user_id):
                 return ['background-color: #3D5320'] * len(row)
             return [''] * len(row)
 
-        df_display = fluxo_diario.sort_values(by="data", ascending=False)[["data", "entradas", "saidas", "saldo_acumulado"]]
+        df_display = fluxo_diario.sort_values(by="data", ascending=True)[["data", "entradas", "saidas", "saldo_acumulado"]]
         styled_df = df_display.style.apply(highlight_today, axis=1).format({"entradas": utils.formatar_moeda_brl, "saidas": utils.formatar_moeda_brl, "saldo_acumulado": utils.formatar_moeda_brl}).hide(axis="index")
         st.dataframe(styled_df, column_config={"data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"), "entradas": st.column_config.NumberColumn("Entradas"), "saidas": st.column_config.NumberColumn("Saídas"), "saldo_acumulado": st.column_config.NumberColumn("Saldo do Dia")}, use_container_width=True)
 
