@@ -1,6 +1,8 @@
 import streamlit as st
 import database
 import yfinance as yf
+import datetime
+from dateutil.relativedelta import relativedelta
 
 def formatar_moeda_brl(valor):
     """Formata um número para o padrão de moeda brasileiro (R$ 1.234,56)."""
@@ -56,3 +58,21 @@ def get_current_price(ticker, tipo_ativo):
     except Exception as e:
         # st.warning(f"Não foi possível buscar a cotação para {ticker}: {e}")
         return 0.0
+
+
+def _ajustar_data_para_sexta_anterior(data_obj):
+    if data_obj.weekday() == 5: return data_obj - datetime.timedelta(days=1)
+    if data_obj.weekday() == 6: return data_obj - datetime.timedelta(days=2)
+    return data_obj
+
+def _calcular_vencimento_credito(data_compra_obj, dia_vencimento, dias_fechamento):
+    try:
+        vencimento_base = (data_compra_obj + relativedelta(months=1)).replace(day=dia_vencimento)
+    except ValueError:
+        proximo_mes = data_compra_obj + relativedelta(months=1)
+        ultimo_dia_mes = (proximo_mes.replace(day=1) + relativedelta(months=1)) - datetime.timedelta(days=1)
+        vencimento_base = ultimo_dia_mes
+    fechamento_preliminar = vencimento_base - datetime.timedelta(days=dias_fechamento)
+    fechamento_real = _ajustar_data_para_sexta_anterior(fechamento_preliminar)
+    if data_compra_obj <= fechamento_real: return vencimento_base
+    else: return vencimento_base + relativedelta(months=1)
