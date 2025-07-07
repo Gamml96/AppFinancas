@@ -52,6 +52,59 @@ def _execute_query(query, params=None, fetch=None, commit=False, executemany_par
     
     return result
 
+
+# --- NOVAS FUNÇÕES DE INSERÇÃO EM LOTE ---
+
+def batch_insert_receitas(user_id, dados_receitas):
+    """Insere uma lista de receitas em uma única transação."""
+    if not dados_receitas:
+        return
+    conn = _get_db_connection()
+    with conn.cursor() as cur:
+        # Adiciona o user_id a cada registro antes de inserir
+        dados_com_user_id = [(user_id,) + tupla for tupla in dados_receitas]
+        psycopg2.extras.execute_values(
+            cur,
+            "INSERT INTO receitas (user_id, conta_id, data, valor, categoria, descricao) VALUES %s",
+            dados_com_user_id
+        )
+    conn.commit()
+    conn.close()
+    st.cache_data.clear()
+
+def batch_insert_despesas(user_id, dados_despesas):
+    """Insere uma lista de despesas em uma única transação."""
+    if not dados_despesas:
+        return
+    conn = _get_db_connection()
+    with conn.cursor() as cur:
+        # Adiciona o user_id a cada registro
+        dados_com_user_id = [(user_id,) + tupla for tupla in dados_despesas]
+        psycopg2.extras.execute_values(
+            cur,
+            "INSERT INTO despesas (user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao, parcela_grupo_id) VALUES %s",
+            dados_com_user_id
+        )
+    conn.commit()
+    conn.close()
+    st.cache_data.clear()
+
+def batch_insert_transacoes_investimento(dados_transacoes):
+    """Insere uma lista de transações de investimento em uma única transação."""
+    if not dados_transacoes:
+        return
+    conn = _get_db_connection()
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(
+            cur,
+            "INSERT INTO transacoes_investimento (investimento_id, tipo_transacao, data, quantidade, preco_unitario) VALUES %s",
+            dados_transacoes
+        )
+    conn.commit()
+    conn.close()
+    st.cache_data.clear()
+
+
 # --- Funções Auxiliares (sem conexão com BD, permanecem as mesmas) ---
 def _ajustar_data_para_sexta_anterior(data_obj):
     if data_obj.weekday() == 5: return data_obj - datetime.timedelta(days=1)
