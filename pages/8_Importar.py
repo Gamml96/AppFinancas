@@ -3,6 +3,8 @@ import database
 import pandas as pd
 import datetime
 import utils
+import datetime
+from dateutil.relativedelta import relativedelta
 # --- Guarda de Autenticação ---
 profile, user_id, username = utils.check_authentication()
 
