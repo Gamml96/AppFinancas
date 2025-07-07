@@ -82,15 +82,24 @@ def render_home_page(user_id):
     else:
         st.write("Fique de olho nas suas próximas movimentações:")
         for data, descricao, valor, tipo in proximos_lancamentos:
-            data_obj = datetime.datetime.strptime(data, '%Y-%m-%d').date()
+            # --- LINHA CORRIGIDA ---
+            data_obj = data # A conversão strptime foi removida
+            # -----------------------
+            
             hoje = datetime.date.today()
-            if data_obj == hoje: dia_str = "Hoje"
-            elif data_obj == hoje + datetime.timedelta(days=1): dia_str = "Amanhã"
-            else: dia_str = data_obj.strftime('%d/%m/%Y')
+            
+            if data_obj == hoje:
+                dia_str = "Hoje"
+            elif data_obj == hoje + datetime.timedelta(days=1):
+                dia_str = "Amanhã"
+            else:
+                dia_str = data_obj.strftime('%d/%m/%Y')
+            
             valor_formatado = utils.formatar_moeda_brl(valor)
+
             if tipo == 'receita':
                 st.success(f"**{dia_str}:** {descricao.upper()} | **+ {valor_formatado}**", icon="💰")
-            else:
+            else: # tipo == 'despesa'
                 st.error(f"**{dia_str}:** {descricao.upper()} | **- {valor_formatado}**", icon="💸")
 
     st.markdown("---")
