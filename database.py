@@ -302,8 +302,25 @@ def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pa
 
 @st.cache_data
 def get_despesas(user_id):
-    query = "SELECT despesa_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao FROM despesas WHERE user_id = %s"
-    return _execute_query(query, (user_id,), fetch='all')
+    """
+    Busca todas as despesas de um usuário, garantindo que TODAS as 12 colunas sejam retornadas.
+    """
+    conn = _get_db_connection() # Usando a conexão do Supabase/PostgreSQL
+    with conn.cursor() as cur:
+        # Query CORRIGIDA, selecionando TODAS as 12 colunas
+        query = """
+            SELECT 
+                despesa_id, user_id, conta_id, data_compra, data_vencimento, 
+                valor, categoria, tipo_pagamento, parcelas, descricao, 
+                recorrencia, parcela_grupo_id 
+            FROM despesas 
+            WHERE user_id = %s 
+            ORDER BY data_vencimento DESC
+        """
+        cur.execute(query, (user_id,))
+        despesas = cur.fetchall()
+    conn.close()
+    return despesas
 
 def update_despesa(despesa_id, user_id, conta_id, data_compra, data_vencimento, valor, categoria, descricao):
     query = "UPDATE despesas SET conta_id = %s, data_compra = %s, data_vencimento = %s, valor = %s, categoria = %s, descricao = %s WHERE despesa_id = %s AND user_id = %s"
