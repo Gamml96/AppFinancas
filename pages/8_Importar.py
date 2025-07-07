@@ -38,118 +38,6 @@ def gerar_template_csv_receitas():
     df_template = pd.DataFrame(template_data)
     return df_template.to_csv(index=False, sep=';').encode('utf-8')
 
-def processar_importacao_receitas(df, user_id, contas):
-    """Função que itera sobre o DataFrame e insere as receitas no banco."""
-    contas_dict = {conta[1].lower(): conta[0] for conta in contas}
-    sucessos = 0
-    erros = []
-
-    colunas_necessarias = ['data', 'descricao', 'valor', 'conta', 'categoria']
-    if not all(col in df.columns for col in colunas_necessarias):
-        st.error(f"O arquivo enviado não contém todas as colunas necessárias. Verifique o template. Colunas esperadas: {colunas_necessarias}")
-        return
-
-    progress_bar = st.progress(0, text="Iniciando importação de receitas...")
-    total_rows = len(df)
-
-    for index, row in df.iterrows():
-        try:
-            descricao = str(row['descricao'])
-            valor_str = str(row['valor']).replace("R$", "").replace(".", "").replace(",", ".").strip()
-            valor = float(valor_str)
-            data = pd.to_datetime(row['data'], dayfirst=True).date()
-            conta_nome = str(row['conta']).lower()
-            categoria_nome = str(row['categoria'])
-            
-            if conta_nome not in contas_dict:
-                raise ValueError(f"Conta '{row['conta']}' não encontrada.")
-
-            categoria_final = database.get_or_create_categoria_receita(user_id, categoria_nome)
-            
-            database.insert_receita(
-                user_id=user_id,
-                conta_id=contas_dict[conta_nome],
-                data=data.isoformat(),
-                valor=valor,
-                categoria=categoria_final,
-                descricao=descricao
-            )
-            sucessos += 1
-        except Exception as e:
-            erros.append(f"Linha {index + 2}: {descricao} - Erro: {e}")
-        
-        progress_bar.progress((index + 1) / total_rows, text=f"Processando receita {index + 1}/{total_rows}")
-
-    st.success(f"Importação concluída! {sucessos} receita(s) importada(s) com sucesso.")
-    if erros:
-        st.error("Algumas linhas não puderam ser importadas:")
-        with st.expander("Ver detalhes dos erros"):
-            for erro in erros:
-                st.write(erro)
-
-def processar_importacao_despesas(df, user_id, contas):
-    """
-    Função simplificada que itera sobre o DataFrame e insere as despesas,
-    assumindo que as colunas seguem o template e criando categorias automaticamente.
-    """
-    contas_dict = {conta[1].lower(): conta[0] for conta in contas}
-
-    sucessos = 0
-    erros = []
-    
-    # Validação de colunas antes de iniciar
-    colunas_necessarias = ['data_compra', 'descricao', 'valor_total', 'conta', 'categoria', 'tipo_pagamento', 'parcelas']
-    if not all(col in df.columns for col in colunas_necessarias):
-        st.error(f"O arquivo enviado não contém todas as colunas necessárias. Verifique o template. Colunas esperadas: {colunas_necessarias}")
-        return
-
-    progress_bar = st.progress(0, text="Iniciando importação...")
-    total_rows = len(df)
-
-    for index, row in df.iterrows():
-        try:
-            # Extrai e limpa os dados usando nomes de coluna fixos
-            descricao = str(row['descricao'])
-            valor_str = str(row['valor_total']).replace("R$", "").replace(".", "").replace(",", ".").strip()
-            valor = float(valor_str)
-            data_compra = pd.to_datetime(row['data_compra'], dayfirst=True).date()
-            conta_nome = str(row['conta']).lower()
-            categoria_nome = str(row['categoria'])
-            tipo_pagamento = str(row['tipo_pagamento']).lower()
-            parcelas = int(row['parcelas'])
-            
-            # Validações
-            if conta_nome not in contas_dict:
-                raise ValueError(f"Conta '{row['conta']}' não encontrada no seu cadastro.")
-            if tipo_pagamento not in ['crédito', 'débito']:
-                raise ValueError(f"Tipo de pagamento '{tipo_pagamento}' inválido (deve ser 'crédito' ou 'débito').")
-
-            # **NOVIDADE: Busca ou cria a categoria automaticamente**
-            categoria_final = database.get_or_create_categoria_despesa(user_id, categoria_nome)
-            
-            database.insert_despesa(
-                user_id=user_id,
-                conta_id=contas_dict[conta_nome],
-                data_compra_str=data_compra.isoformat(),
-                valor=valor,
-                categoria=categoria_final,
-                tipo_pagamento=tipo_pagamento,
-                parcelas=parcelas,
-                descricao=descricao
-            )
-            sucessos += 1
-        except Exception as e:
-            erros.append(f"Linha {index + 2}: {descricao} - Erro: {e}")
-        
-        progress_bar.progress((index + 1) / total_rows, text=f"Processando linha {index + 1}/{total_rows}")
-
-    st.success(f"Importação concluída! {sucessos} item(ns) importado(s) com sucesso.")
-    if erros:
-        st.error("Algumas linhas não puderam ser importadas:")
-        with st.expander("Ver detalhes dos erros"):
-            for erro in erros:
-                st.write(erro)
-
 @st.cache_data
 def gerar_template_csv_investimentos():
     """Cria um DataFrame de exemplo para transações de investimento, agora com tipo_ativo."""
@@ -164,21 +52,84 @@ def gerar_template_csv_investimentos():
     df_template = pd.DataFrame(template_data)
     return df_template.to_csv(index=False, sep=';').encode('utf-8')
 
-# ADICIONE ESTA NOVA FUNÇÃO DE PROCESSAMENTO
-def processar_importacao_investimentos(df, user_id):
-    """Função que itera sobre o DataFrame e insere as transações, criando ativos se necessário."""
-    sucessos = 0
+
+# --- FUNÇÕES DE PROCESSAMENTO OTIMIZADAS ---
+
+def processar_importacao_receitas(df, user_id, contas):
+    contas_dict = {conta[1].lower(): conta[0] for conta in contas}
+    dados_para_inserir = []
     erros = []
+    for index, row in df.iterrows():
+        try:
+            descricao = str(row['descricao'])
+            valor = float(str(row['valor']).replace(",", "."))
+            data = pd.to_datetime(row['data'], dayfirst=True).date()
+            conta_nome = str(row['conta']).lower()
+            categoria_nome = str(row['categoria'])
+            if conta_nome not in contas_dict: raise ValueError(f"Conta '{row['conta']}' não encontrada.")
+            categoria_final = database.get_or_create_categoria_receita(user_id, categoria_nome)
+            dados_para_inserir.append((contas_dict[conta_nome], data.isoformat(), valor, categoria_final, descricao))
+        except Exception as e:
+            erros.append(f"Linha {index + 2}: {row.get('descricao', 'N/A')} - Erro: {e}")
+    
+    if dados_para_inserir:
+        database.batch_insert_receitas(user_id, dados_para_inserir)
+        st.success(f"{len(dados_para_inserir)} receitas importadas com sucesso!")
+    if erros:
+        st.error(f"{len(erros)} linhas não puderam ser importadas:")
+        with st.expander("Ver detalhes dos erros"): [st.write(erro) for erro in erros]
 
-    # A coluna 'tipo_ativo' agora é necessária
-    colunas_necessarias = ['data', 'codigo_ativo', 'tipo_transacao', 'quantidade', 'preco_unitario', 'tipo_ativo']
-    if not all(col in df.columns for col in colunas_necessarias):
-        st.error(f"O arquivo enviado não contém todas as colunas necessárias. Verifique o template. Colunas esperadas: {colunas_necessarias}")
-        return
+def processar_importacao_despesas(df, user_id, contas):
+    contas_dict = {conta[1].lower(): conta[0] for conta in contas}
+    dados_para_inserir = []
+    erros = []
+    for index, row in df.iterrows():
+        try:
+            descricao_base = str(row['descricao'])
+            valor = float(str(row['valor_total']).replace(",", "."))
+            data_compra = pd.to_datetime(row['data_compra'], dayfirst=True).date()
+            conta_nome = str(row['conta']).lower()
+            categoria_nome = str(row['categoria'])
+            tipo_pagamento = str(row['tipo_pagamento']).lower()
+            parcelas = int(row['parcelas'])
 
-    progress_bar = st.progress(0, text="Iniciando importação de investimentos...")
-    total_rows = len(df)
+            if conta_nome not in contas_dict: raise ValueError(f"Conta '{row['conta']}' não encontrada.")
+            if tipo_pagamento not in ['crédito', 'débito']: raise ValueError("Tipo de pagamento inválido.")
+            
+            conta_id = contas_dict[conta_nome]
+            categoria_final = database.get_or_create_categoria_despesa(user_id, categoria_nome)
+            
+            # Lógica de cálculo de parcelas (movida para cá)
+            valor_parcela_padrao = round(valor / parcelas, 2)
+            diferenca = round(valor - (valor_parcela_padrao * parcelas), 2)
+            valor_primeira_parcela = valor_parcela_padrao + diferenca
+            grupo_id = int(datetime.datetime.now().timestamp() * 1000) + index
 
+            if tipo_pagamento == 'crédito':
+                conta_info = next((c for c in contas if c[0] == conta_id), None)
+                primeiro_vencimento = utils._calcular_vencimento_credito(data_compra, conta_info[2], conta_info[5])
+            else:
+                primeiro_vencimento = data_compra
+
+            for i in range(parcelas):
+                valor_a_inserir = valor_primeira_parcela if i == 0 else valor_parcela_padrao
+                vencimento_parcela = primeiro_vencimento + relativedelta(months=i)
+                descricao_parcela = f"{descricao_base} ({i+1}/{parcelas})" if parcelas > 1 else descricao_base
+                dados_para_inserir.append((conta_id, data_compra.isoformat(), vencimento_parcela.isoformat(), valor_a_inserir, categoria_final, tipo_pagamento, i + 1, descricao_parcela, grupo_id))
+
+        except Exception as e:
+            erros.append(f"Linha {index + 2}: {row.get('descricao', 'N/A')} - Erro: {e}")
+
+    if dados_para_inserir:
+        database.batch_insert_despesas(user_id, dados_para_inserir)
+        st.success(f"{len(dados_para_inserir)} parcelas de despesas importadas com sucesso!")
+    if erros:
+        st.error(f"{len(erros)} linhas não puderam ser importadas:")
+        with st.expander("Ver detalhes dos erros"): [st.write(erro) for erro in erros]
+
+def processar_importacao_investimentos(df, user_id):
+    dados_para_inserir = []
+    erros = []
     for index, row in df.iterrows():
         try:
             codigo_ativo = str(row['codigo_ativo'])
@@ -186,28 +137,19 @@ def processar_importacao_investimentos(df, user_id):
             data = pd.to_datetime(row['data'], dayfirst=True).date()
             quantidade = float(row['quantidade'])
             preco_unitario = float(str(row['preco_unitario']).replace(",", "."))
-            tipo_ativo = str(row['tipo_ativo']) # <-- NOVO CAMPO
-
-            if tipo_transacao not in ['compra', 'venda']:
-                raise ValueError(f"Tipo de transação '{row['tipo_transacao']}' inválido. Use 'compra' ou 'venda'.")
-
-            # --- LÓGICA ALTERADA ---
-            # Em vez de procurar em um dicionário, chamamos a nova função que busca ou cria.
+            tipo_ativo = str(row['tipo_ativo'])
+            if tipo_transacao not in ['compra', 'venda']: raise ValueError("Tipo de transação inválido.")
             investimento_id = database.get_or_create_investimento(user_id, codigo_ativo, tipo_ativo)
-            
-            database.add_transacao_investimento(investimento_id, tipo_transacao, data.isoformat(), quantidade, preco_unitario)
-            sucessos += 1
+            dados_para_inserir.append((investimento_id, tipo_transacao, data.isoformat(), quantidade, preco_unitario))
         except Exception as e:
-            erros.append(f"Linha {index + 2}: Ativo '{row['codigo_ativo']}' - Erro: {e}")
-        
-        progress_bar.progress((index + 1) / total_rows, text=f"Processando transação {index + 1}/{total_rows}")
+            erros.append(f"Linha {index + 2}: {row.get('codigo_ativo', 'N/A')} - Erro: {e}")
 
-    st.success(f"Importação concluída! {sucessos} transação(ões) de investimento importada(s) com sucesso.")
+    if dados_para_inserir:
+        database.batch_insert_transacoes_investimento(dados_para_inserir)
+        st.success(f"{len(dados_para_inserir)} transações de investimento importadas com sucesso!")
     if erros:
-        st.error("Algumas linhas não puderam ser importadas:")
-        with st.expander("Ver detalhes dos erros"):
-            for erro in erros:
-                st.write(erro)
+        st.error(f"{len(erros)} linhas não puderam ser importadas:")
+        with st.expander("Ver detalhes dos erros"): [st.write(erro) for erro in erros]
 
 # --- Conteúdo da Página ---
 contas = database.get_contas(user_id)
