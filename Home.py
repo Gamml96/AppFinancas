@@ -174,21 +174,21 @@ def main():
             
             # Dicionário com todas as páginas disponíveis
             PAGES = {
-                "Home": {"path": "app.py", "icon": "🏠"},
-                "Relatórios": {"path": "app_pages/7_Relatórios.py", "icon": "📊"},
-                "Faturas": {"path": "app_pages/5_Faturas.py", "icon": "💳"},
-                "Investimentos": {"path": "app_pages/6_Investimentos.py", "icon": "📈"},
-                "Contas": {"path": "app_pages/1_Contas.py", "icon": "🏦"},
-                "Categorias": {"path": "app_pages/2_Categorias.py", "icon": " L"},
-                "Receitas": {"path": "app_pages/3_Receitas.py", "icon": "💰"},
-                "Despesas": {"path": "app_pages/4_Despesas.py", "icon": "💸"},
-                "Importar": {"path": "app_pages/8_Importar.py", "icon": "📥"},
-                "Perfil": {"path": "app_pages/9_Perfil.py", "icon": "👤"},
+                "Home": {"path": "Home.py", "icon": "🏠"},
+                "Relatórios": {"path": "pages/7_Relatórios.py", "icon": "📊"},
+                "Faturas": {"path": "pages/5_Faturas.py", "icon": "💳"},
+                "Investimentos": {"path": "pages/6_Investimentos.py", "icon": "📈"},
+                "Contas": {"path": "pages/1_Contas.py", "icon": "🏦"},
+                "Categorias": {"path": "pages/2_Categorias.py", "icon": " L"},
+                "Receitas": {"path": "pages/3_Receitas.py", "icon": "💰"},
+                "Despesas": {"path": "pages/4_Despesas.py", "icon": "💸"},
+                "Importar": {"path": "pages/8_Importar.py", "icon": "📥"},
+                "Perfil": {"path": "pages/9_Perfil.py", "icon": "👤"},
             }
 
             # Adiciona a página de Admin ao dicionário APENAS se o usuário for admin
             if database.is_user_admin(username):
-                PAGES["Admin"] = {"path": "app_pages/10_Admin.py", "icon": "⚙️"}
+                PAGES["Admin"] = {"path": "pages/10_Admin.py", "icon": "⚙️"}
 
             # Cria os links de navegação
             for page_name, page_info in PAGES.items():
