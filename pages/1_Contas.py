@@ -3,7 +3,24 @@ import database
 import pandas as pd
 import datetime
 import utils
+
+# Lógica para usuário LOGADO
 import streamlit_authenticator as stauth
+credentials = database.get_authenticator_credentials()
+authenticator = stauth.Authenticate(
+    credentials, 
+    cookie_name="app_fin_cookie",
+    key="app_fin_key", 
+    cookie_expiry_days=30
+)
+if st.session_state.get("authentication_status"):
+    username = st.session_state['username']
+    
+    with st.sidebar:
+        st.subheader(f"Bem-vindo, {st.session_state['name']}!")
+        st.markdown("---")
+        authenticator.logout("Logout", "sidebar", key="logout_button")
+
 # --- Guarda de Autenticação ---
 profile, user_id, username = utils.check_authentication()
 
@@ -68,18 +85,3 @@ if col2.button("Excluir Selecionados", key="delete_contas"):
     else:
         st.toast("Nenhuma conta selecionada para exclusão.", icon="⚠️")
 
-# Lógica para usuário LOGADO
-credentials = database.get_authenticator_credentials()
-authenticator = stauth.Authenticate(
-    credentials, 
-    cookie_name="app_fin_cookie",
-    key="app_fin_key", 
-    cookie_expiry_days=30
-)
-if st.session_state.get("authentication_status"):
-    username = st.session_state['username']
-    
-    with st.sidebar:
-        st.subheader(f"Bem-vindo, {st.session_state['name']}!")
-        st.markdown("---")
-        authenticator.logout("Logout", "sidebar", key="logout_button")
