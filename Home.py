@@ -153,11 +153,13 @@ def render_home_page(user_id):
         styled_df = df_display.style.apply(highlight_today, axis=1).format({"entradas": utils.formatar_moeda_brl, "saidas": utils.formatar_moeda_brl, "saldo_acumulado": utils.formatar_moeda_brl}).hide(axis="index")
         st.dataframe(styled_df, column_config={"data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"), "entradas": st.column_config.NumberColumn("Entradas"), "saidas": st.column_config.NumberColumn("Saídas"), "saldo_acumulado": st.column_config.NumberColumn("Saldo do Dia")}, use_container_width=True)
 
-# --- LÓGICA PRINCIPAL DE AUTENTICAÇÃO ---
+# --- LÓGICA PRINCIPAL DE AUTENTICAÇÃO (COM A CORREÇÃO) ---
 def main():
     st.set_page_config("App Finanças", layout="wide", initial_sidebar_state="collapsed")
-    
-    
+    # A chamada ao init_db() não é mais necessária se você migrou para o Turso/Supabase
+    # database.init_db() 
+
+    # CSS para ocultar a sidebar INTEIRA se o usuário estiver deslogado
     hide_sidebar_nav_css = """
         <style>
             [data-testid="stSidebarNav"] {display: none;}
@@ -176,23 +178,50 @@ def main():
     )
 
     if st.session_state.get("authentication_status"):
+        # Se logado, mostra o nome e o botão de logout
         with st.sidebar:
             st.subheader(f"Bem-vindo, {st.session_state['name']}!")
             authenticator.logout("Logout", "sidebar", key="logout_button")
         
-        profile = database.get_user_profile(st.session_state['username'])
+        # --- INÍCIO DA CORREÇÃO ---
+        # 1. Verifica o status de administrador do usuário LOGADO
+        username = st.session_state['username']
+        is_admin = database.is_user_admin(username)
+
+        # 2. Se o usuário NÃO for admin, injeta um CSS para esconder o link da página de Admin
+        if not is_admin:
+            # O seletor CSS `a[href="/Admin"]` mira especificamente no link da página '99_Admin.py'
+            hide_admin_page_css = """
+                <style>
+                    a[href="/Admin"] {display: none;}
+                </style>
+            """
+            st.markdown(hide_admin_page_css, unsafe_allow_html=True)
+        # --- FIM DA CORREÇÃO ---
+
+        # Renderiza a página Home
+        profile = database.get_user_profile(username)
         if profile:
             user_id = profile['user_id']
             render_home_page(user_id)
         else:
             st.error("Erro ao carregar perfil do usuário.")
     else:
-        authenticator.login(fields={'Form name': 'Login'})
-        if st.session_state.get("authentication_status") is False:
-            st.error("Usuário ou senha incorretos.")
-        elif st.session_state.get("authentication_status") is None:
-            st.warning("Por favor, insira seu usuário e senha.")
+        # Lógica de Login/Cadastro (sem alterações)
+        choice = st.selectbox("Escolha uma ação:", ["Login", "Criar Conta"])
+        if choice == 'Criar Conta':
+            st.subheader("Crie sua nova conta")
+            try:
+                if authenticator.register_user('Criar conta', preauthorization=False, fields={'Form name': 'Formulário de Cadastro', 'Username': 'Nome de usuário', 'Name': 'Nome completo', 'Email': 'E-mail', 'Password': 'Senha', 'Repeat Password': 'Repita a senha', 'Register': 'Criar conta'}):
+                    st.success('Usuário criado com sucesso! Por favor, selecione "Login" para entrar.')
+            except Exception as e:
+                st.error(e)
+        elif choice == 'Login':
+            authenticator.login(fields={'Form name': 'Login'})
+            if st.session_state.get("authentication_status") is False:
+                st.error("Usuário ou senha incorretos.")
+            elif st.session_state.get("authentication_status") is None:
+                st.warning("Por favor, insira seu usuário e senha.")
 
 if __name__ == "__main__":
     main()
-    
