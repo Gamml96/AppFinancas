@@ -182,19 +182,20 @@ def main():
         
         with st.sidebar:
             st.subheader(f"Bem-vindo, {st.session_state['name']}!")
-            authenticator.logout("Logout", "sidebar", key="logout_button")
             
-            # --- INÍCIO DA NOVA LÓGICA DO BOTÃO ADMIN ---
-            # 1. Verifica se o usuário é admin
+            # Lógica do Botão Admin
             if database.is_user_admin(username):
                 st.markdown("---")
                 st.subheader("Administração")
-                # 2. Cria o botão que navega para a página de admin
                 if st.button("Painel do Administrador", use_container_width=True):
-                    st.switch_page("modules/admin_page.py")
-            # --- FIM DA NOVA LÓGICA ---
-
-        # Renderiza a página Home normalmente
+                    # --- LINHA CORRIGIDA ---
+                    # Agora aponta para o arquivo oculto dentro da pasta pages
+                    st.switch_page("pages/.admin_page.py")
+            
+            st.markdown("---")
+            authenticator.logout("Logout", "sidebar", key="logout_button")
+        
+        # Renderiza a página Home
         profile = database.get_user_profile(username)
         if profile:
             user_id = profile['user_id']
@@ -202,7 +203,7 @@ def main():
         else:
             st.error("Erro ao carregar perfil do usuário.")
 
-    # Lógica para usuário DESLOGADO (simplificada)
+    # Lógica para usuário DESLOGADO (sem cadastro)
     else:
         st.subheader("Acesse sua conta")
         authenticator.login(fields={'Form name': 'Login'})
