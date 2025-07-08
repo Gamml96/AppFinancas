@@ -1,25 +1,25 @@
+# app.py (versão corrigida para ser a sua Home)
 import streamlit as st
 import streamlit_authenticator as stauth
 import database
 import datetime
 import pandas as pd
-import utils
+import utils # Certifique-se que o utils.py está na mesma pasta
 import plotly.express as px
 from dateutil.relativedelta import relativedelta
 
-#======================================================================
-# FUNÇÃO PRINCIPAL DA PÁGINA HOME
-#======================================================================
 def render_home_page(user_id):
     st.title("Visão Geral Financeira")
 
-    # --- SEÇÃO DE ACESSO RÁPIDO COM POPOVERS ---
+    # --- INÍCIO DA NOVA SEÇÃO: BOTÕES DE ACESSO RÁPIDO ---
     st.markdown("### Acesso Rápido")
     col1, col2 = st.columns(2)
 
+    # Botão para Adicionar Receita
     with col1:
         with st.popover("➕ Adicionar Receita", use_container_width=True):
             st.markdown("#### Nova Receita")
+            # Busca os dados necessários para o formulário
             contas = database.get_contas(user_id)
             categorias_receita = database.get_categorias(user_id, "receita")
             if not contas or not categorias_receita:
@@ -42,6 +42,7 @@ def render_home_page(user_id):
                         else:
                             st.warning("Preencha todos os campos.")
 
+    # Botão para Adicionar Despesa
     with col2:
         with st.popover("➖ Adicionar Despesa", use_container_width=True):
             st.markdown("#### Nova Despesa")
@@ -70,31 +71,40 @@ def render_home_page(user_id):
                             st.warning("Preencha todos os campos.")
                             
     st.markdown("---")
+    # --- FIM DA NOVA SEÇÃO ---
 
-    # --- SEÇÃO DE LANÇAMENTOS PRÓXIMOS ---
+    # Seção de Lançamentos Próximos
     st.markdown("### Lançamentos Próximos")
-    proximos_lancamentos = database.get_proximos_lancamentos(user_id, dias_futuros=7)
+    proximos_lancamentos = database.get_proximos_lancamentos(user_id, dias_futuros=3)
 
     if not proximos_lancamentos:
-        st.info("Nenhum lançamento previsto para os próximos 7 dias.")
+        st.info("Nenhum lançamento previsto para os próximos 3 dias.")
     else:
         st.write("Fique de olho nas suas próximas movimentações:")
         for data, descricao, valor, tipo in proximos_lancamentos:
-            data_obj = data 
+            # --- LINHA CORRIGIDA ---
+            data_obj = data # A conversão strptime foi removida
+            # -----------------------
+            
             hoje = datetime.date.today()
-            if data_obj == hoje: dia_str = "Hoje"
-            elif data_obj == hoje + datetime.timedelta(days=1): dia_str = "Amanhã"
-            else: dia_str = data_obj.strftime('%d/%m/%Y')
+            
+            if data_obj == hoje:
+                dia_str = "Hoje"
+            elif data_obj == hoje + datetime.timedelta(days=1):
+                dia_str = "Amanhã"
+            else:
+                dia_str = data_obj.strftime('%d/%m/%Y')
             
             valor_formatado = utils.formatar_moeda_brl(valor)
+
             if tipo == 'receita':
                 st.success(f"**{dia_str}:** {descricao.upper()} | **+ {valor_formatado}**", icon="💰")
-            else:
+            else: # tipo == 'despesa'
                 st.error(f"**{dia_str}:** {descricao.upper()} | **- {valor_formatado}**", icon="💸")
 
     st.markdown("---")
     
-    # --- SEÇÃO DE FLUXO DE CAIXA ---
+    # Seção do Fluxo de Caixa
     st.header("Fluxo de Caixa Diário")
     transacoes = database.get_transacoes_consolidadas(user_id)
 
@@ -120,7 +130,6 @@ def render_home_page(user_id):
         data_fim_hoje = pd.to_datetime(datetime.date.today())
         data_fim = max(data_fim_transacoes, data_fim_hoje)
         todos_os_dias = pd.date_range(start=data_inicio, end=data_fim, freq='D')
-
         fluxo_diario = fluxo_diario.set_index('data').reindex(todos_os_dias)
         fluxo_diario[['entradas', 'saidas']] = fluxo_diario[['entradas', 'saidas']].fillna(0)
         fluxo_diario['saldo_dia'] = fluxo_diario['entradas'] - fluxo_diario['saidas']
@@ -129,11 +138,9 @@ def render_home_page(user_id):
 
         saldo_atual_valor = fluxo_diario[fluxo_diario['data'].dt.date <= datetime.date.today()]['saldo_acumulado'].iloc[-1] if not fluxo_diario.empty else 0.0
         st.metric("Saldo Atual Consolidado (Hoje)", utils.formatar_moeda_brl(saldo_atual_valor))
-
         st.markdown("---")
-        st.markdown("### Evolução do Saldo (Projeção Futura)")
+        st.markdown("### Evolução do Saldo")
         st.line_chart(fluxo_diario.rename(columns={'data':'index'}).set_index('index')['saldo_acumulado'])
-
         st.markdown("---")
         st.markdown("### Detalhamento do Fluxo de Caixa")
 
@@ -142,19 +149,23 @@ def render_home_page(user_id):
                 return ['background-color: #3D5320'] * len(row)
             return [''] * len(row)
 
-        df_display = fluxo_diario.sort_values(by="data", ascending=False)[["data", "entradas", "saidas", "saldo_acumulado"]]
+        df_display = fluxo_diario.sort_values(by="data", ascending=True)[["data", "entradas", "saidas", "saldo_acumulado"]]
         styled_df = df_display.style.apply(highlight_today, axis=1).format({"entradas": utils.formatar_moeda_brl, "saidas": utils.formatar_moeda_brl, "saldo_acumulado": utils.formatar_moeda_brl}).hide(axis="index")
         st.dataframe(styled_df, column_config={"data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"), "entradas": st.column_config.NumberColumn("Entradas"), "saidas": st.column_config.NumberColumn("Saídas"), "saldo_acumulado": st.column_config.NumberColumn("Saldo do Dia")}, use_container_width=True)
 
-#======================================================================
-# LÓGICA PRINCIPAL DE AUTENTICAÇÃO
-#======================================================================
+# --- LÓGICA PRINCIPAL DE AUTENTICAÇÃO ---
 def main():
     st.set_page_config("App Finanças", layout="wide", initial_sidebar_state="collapsed")
     
-    # Esta função não é mais necessária se você migrou para um BD na nuvem
-    # database.init_db() 
     
+    hide_sidebar_nav_css = """
+        <style>
+            [data-testid="stSidebarNav"] {display: none;}
+        </style>
+    """
+    if not st.session_state.get("authentication_status"):
+        st.markdown(hide_sidebar_nav_css, unsafe_allow_html=True)
+
     credentials = database.get_authenticator_credentials()
     
     authenticator = stauth.Authenticate(
@@ -164,52 +175,19 @@ def main():
         cookie_expiry_days=30
     )
 
-    # --- LÓGICA PARA USUÁRIO LOGADO ---
     if st.session_state.get("authentication_status"):
-        username = st.session_state['username']
-        
-        # --- NOVO MENU MANUAL NA SIDEBAR ---
         with st.sidebar:
             st.subheader(f"Bem-vindo, {st.session_state['name']}!")
-            
-            # Dicionário com todas as páginas disponíveis
-            PAGES = {
-                "Home": {"path": "Home.py", "icon": "🏠"},
-                "Relatórios": {"path": "pages/7_Relatórios.py", "icon": "📊"},
-                "Faturas": {"path": "pages/5_Faturas.py", "icon": "💳"},
-                "Investimentos": {"path": "pages/6_Investimentos.py", "icon": "📈"},
-                "Contas": {"path": "pages/1_Contas.py", "icon": "🏦"},
-                "Categorias": {"path": "pages/2_Categorias.py", "icon": " L"},
-                "Receitas": {"path": "pages/3_Receitas.py", "icon": "💰"},
-                "Despesas": {"path": "pages/4_Despesas.py", "icon": "💸"},
-                "Importar": {"path": "pages/8_Importar.py", "icon": "📥"},
-                "Perfil": {"path": "pages/9_Perfil.py", "icon": "👤"},
-            }
-
-            # Adiciona a página de Admin ao dicionário APENAS se o usuário for admin
-            if database.is_user_admin(username):
-                PAGES["Admin"] = {"path": "pages/10_Admin.py", "icon": "⚙️"}
-
-            # Cria os links de navegação
-            for page_name, page_info in PAGES.items():
-                st.page_link(page_info["path"], label=page_name, icon=page_info["icon"])
-
-            st.markdown("---")
             authenticator.logout("Logout", "sidebar", key="logout_button")
         
-        # O conteúdo da página Home é renderizado aqui, pois este é o app.py
-        profile = database.get_user_profile(username)
+        profile = database.get_user_profile(st.session_state['username'])
         if profile:
             user_id = profile['user_id']
             render_home_page(user_id)
         else:
             st.error("Erro ao carregar perfil do usuário.")
-
-    # --- TELA DE LOGIN SIMPLIFICADA (SEM CADASTRO) ---
     else:
-        st.subheader("Acesse sua conta")
         authenticator.login(fields={'Form name': 'Login'})
-        
         if st.session_state.get("authentication_status") is False:
             st.error("Usuário ou senha incorretos.")
         elif st.session_state.get("authentication_status") is None:
