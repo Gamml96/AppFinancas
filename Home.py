@@ -152,15 +152,9 @@ def render_home_page(user_id):
 def main():
     st.set_page_config("App Finanças", layout="wide", initial_sidebar_state="collapsed")
     
-    # CSS para ocultar a sidebar INTEIRA se o usuário estiver deslogado
-    hide_sidebar_nav_css = """
-        <style>
-            [data-testid="stSidebarNav"] {display: none;}
-        </style>
-    """
-    if not st.session_state.get("authentication_status"):
-        st.markdown(hide_sidebar_nav_css, unsafe_allow_html=True)
-
+    # Esta função não é mais necessária se você migrou para um BD na nuvem
+    # database.init_db() 
+    
     credentials = database.get_authenticator_credentials()
     
     authenticator = stauth.Authenticate(
@@ -170,60 +164,56 @@ def main():
         cookie_expiry_days=30
     )
 
+    # --- LÓGICA PARA USUÁRIO LOGADO ---
     if st.session_state.get("authentication_status"):
+        username = st.session_state['username']
+        
+        # --- NOVO MENU MANUAL NA SIDEBAR ---
         with st.sidebar:
             st.subheader(f"Bem-vindo, {st.session_state['name']}!")
+            
+            # Dicionário com todas as páginas disponíveis
+            PAGES = {
+                "Home": {"path": "app.py", "icon": "🏠"},
+                "Relatórios": {"path": "app_pages/7_Relatórios.py", "icon": "📊"},
+                "Faturas": {"path": "app_pages/5_Faturas.py", "icon": "💳"},
+                "Investimentos": {"path": "app_pages/6_Investimentos.py", "icon": "📈"},
+                "Contas": {"path": "app_pages/1_Contas.py", "icon": "🏦"},
+                "Categorias": {"path": "app_pages/2_Categorias.py", "icon": " L"},
+                "Receitas": {"path": "app_pages/3_Receitas.py", "icon": "💰"},
+                "Despesas": {"path": "app_pages/4_Despesas.py", "icon": "💸"},
+                "Importar": {"path": "app_pages/8_Importar.py", "icon": "📥"},
+                "Perfil": {"path": "app_pages/9_Perfil.py", "icon": "👤"},
+            }
+
+            # Adiciona a página de Admin ao dicionário APENAS se o usuário for admin
+            if database.is_user_admin(username):
+                PAGES["Admin"] = {"path": "app_pages/10_Admin.py", "icon": "⚙️"}
+
+            # Cria os links de navegação
+            for page_name, page_info in PAGES.items():
+                st.page_link(page_info["path"], label=page_name, icon=page_info["icon"])
+
+            st.markdown("---")
             authenticator.logout("Logout", "sidebar", key="logout_button")
         
-        username = st.session_state['username']
-        is_admin = database.is_user_admin(username)
-
-        # Oculta a página de Admin para não-admins
-        if not is_admin:
-            hide_admin_page_css = """
-                <style>
-                    a[href$="Admin"] { display: none; }
-                </style>
-            """
-            st.markdown(hide_admin_page_css, unsafe_allow_html=True)
-        
-        # Renderiza o conteúdo da página Home
+        # O conteúdo da página Home é renderizado aqui, pois este é o app.py
         profile = database.get_user_profile(username)
         if profile:
             user_id = profile['user_id']
             render_home_page(user_id)
         else:
             st.error("Erro ao carregar perfil do usuário.")
-            
-    else:
-        # Novo fluxo de Login/Cadastro
-        if 'register_form' not in st.session_state:
-            st.session_state.register_form = False
 
-        if st.session_state.register_form:
-            st.subheader("Crie sua nova conta")
-            try:
-                if authenticator.register_user('Criar conta', preauthorization=False):
-                    st.success('Usuário criado com sucesso! Por favor, volte para fazer o login.')
-                    st.session_state.register_form = False
-                    st.rerun() 
-            except Exception as e:
-                st.error(e)
-            
-            if st.button("Voltar para Login"):
-                st.session_state.register_form = False
-                st.rerun()
-        else:
-            st.subheader("Acesse sua conta")
-            authenticator.login(fields={'Form name': 'Login'})
-            
-            if st.session_state.get("authentication_status") is False:
-                st.error("Usuário ou senha incorretos.")
-            
-            st.markdown("---")
-            if st.button("Não tem uma conta? Crie uma aqui"):
-                st.session_state.register_form = True
-                st.rerun()
+    # --- TELA DE LOGIN SIMPLIFICADA (SEM CADASTRO) ---
+    else:
+        st.subheader("Acesse sua conta")
+        authenticator.login(fields={'Form name': 'Login'})
+        
+        if st.session_state.get("authentication_status") is False:
+            st.error("Usuário ou senha incorretos.")
+        elif st.session_state.get("authentication_status") is None:
+            st.warning("Por favor, insira seu usuário e senha.")
 
 if __name__ == "__main__":
     main()
