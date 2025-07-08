@@ -69,6 +69,12 @@ if col2.button("Excluir Selecionados", key="delete_contas"):
         st.toast("Nenhuma conta selecionada para exclusão.", icon="⚠️")
 
 # Lógica para usuário LOGADO
+authenticator = stauth.Authenticate(
+    credentials, 
+    cookie_name="app_fin_cookie",
+    key="app_fin_key", 
+    cookie_expiry_days=30
+)
 if st.session_state.get("authentication_status"):
     username = st.session_state['username']
     
