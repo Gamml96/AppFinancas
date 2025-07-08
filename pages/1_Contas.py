@@ -69,6 +69,7 @@ if col2.button("Excluir Selecionados", key="delete_contas"):
         st.toast("Nenhuma conta selecionada para exclusão.", icon="⚠️")
 
 # Lógica para usuário LOGADO
+credentials = database.get_authenticator_credentials()
 authenticator = stauth.Authenticate(
     credentials, 
     cookie_name="app_fin_cookie",
