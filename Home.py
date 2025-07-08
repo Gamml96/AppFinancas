@@ -182,16 +182,6 @@ def main():
         
         with st.sidebar:
             st.subheader(f"Bem-vindo, {st.session_state['name']}!")
-            
-            # Lógica do Botão Admin
-            if database.is_user_admin(username):
-                st.markdown("---")
-                st.subheader("Administração")
-                if st.button("Painel do Administrador", use_container_width=True):
-                    # --- LINHA CORRIGIDA ---
-                    # Agora aponta para o arquivo oculto dentro da pasta pages
-                    st.switch_page("pages/.admin_page.py")
-            
             st.markdown("---")
             authenticator.logout("Logout", "sidebar", key="logout_button")
         
