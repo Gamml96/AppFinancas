@@ -66,3 +66,12 @@ if col2.button("Excluir Selecionados", key="delete_contas"):
         st.rerun()
     else:
         st.toast("Nenhuma conta selecionada para exclusão.", icon="⚠️")
+
+# Lógica para usuário LOGADO
+if st.session_state.get("authentication_status"):
+    username = st.session_state['username']
+    
+    with st.sidebar:
+        st.subheader(f"Bem-vindo, {st.session_state['name']}!")
+        st.markdown("---")
+        authenticator.logout("Logout", "sidebar", key="logout_button")
