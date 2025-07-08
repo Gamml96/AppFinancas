@@ -21,14 +21,14 @@ if st.session_state.get("authentication_status"):
         st.markdown("---")
         authenticator.logout("Logout", "sidebar", key="logout_button")
     # Lógica para usuário DESLOGADO (sem cadastro)
-    else:
-        st.subheader("Acesse sua conta")
-        authenticator.login(fields={'Form name': 'Login'})
-        
-        if st.session_state.get("authentication_status") is False:
-            st.error("Usuário ou senha incorretos.")
-        elif st.session_state.get("authentication_status") is None:
-            st.warning("Por favor, insira seu usuário e senha.")
+else:
+    st.subheader("Acesse sua conta")
+    authenticator.login(fields={'Form name': 'Login'})
+    
+    if st.session_state.get("authentication_status") is False:
+        st.error("Usuário ou senha incorretos.")
+    elif st.session_state.get("authentication_status") is None:
+        st.warning("Por favor, insira seu usuário e senha.")
 # --- Guarda de Autenticação ---
 profile, user_id, username = utils.check_authentication()
 
