@@ -5,7 +5,16 @@ import datetime
 import utils
 import bcrypt
 # --- Guarda de Autenticação ---
-profile, user_id, username = utils.check_authentication()
+try:
+    profile, user_id, username = utils.check_authentication()
+except:
+    st.info("Por favor, faça o login para acessar esta página.")
+    st.stop()
+
+# Guarda de Permissão (Etapa 2: verifica se é admin)
+if not database.is_user_admin(username):
+    st.error("Acesso negado. Esta página é restrita a administradores.")
+    st.stop()
 
 # --- Conteúdo da Página ---
 
