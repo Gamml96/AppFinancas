@@ -154,10 +154,11 @@ def render_home_page(user_id):
         st.dataframe(styled_df, column_config={"data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"), "entradas": st.column_config.NumberColumn("Entradas"), "saidas": st.column_config.NumberColumn("Saídas"), "saldo_acumulado": st.column_config.NumberColumn("Saldo do Dia")}, use_container_width=True)
 
 # --- LÓGICA PRINCIPAL DE AUTENTICAÇÃO ---
+# --- LÓGICA PRINCIPAL DE AUTENTICAÇÃO ---
 def main():
     st.set_page_config("App Finanças", layout="wide", initial_sidebar_state="collapsed")
     
-    
+    # CSS para ocultar a sidebar se o usuário estiver deslogado
     hide_sidebar_nav_css = """
         <style>
             [data-testid="stSidebarNav"] {display: none;}
@@ -175,19 +176,37 @@ def main():
         cookie_expiry_days=30
     )
 
+    # Lógica para usuário LOGADO
     if st.session_state.get("authentication_status"):
+        username = st.session_state['username']
+        
         with st.sidebar:
             st.subheader(f"Bem-vindo, {st.session_state['name']}!")
             authenticator.logout("Logout", "sidebar", key="logout_button")
-        
-        profile = database.get_user_profile(st.session_state['username'])
+            
+            # --- INÍCIO DA NOVA LÓGICA DO BOTÃO ADMIN ---
+            # 1. Verifica se o usuário é admin
+            if database.is_user_admin(username):
+                st.markdown("---")
+                st.subheader("Administração")
+                # 2. Cria o botão que navega para a página de admin
+                if st.button("Painel do Administrador", use_container_width=True):
+                    st.switch_page("modules/admin_page.py")
+            # --- FIM DA NOVA LÓGICA ---
+
+        # Renderiza a página Home normalmente
+        profile = database.get_user_profile(username)
         if profile:
             user_id = profile['user_id']
             render_home_page(user_id)
         else:
             st.error("Erro ao carregar perfil do usuário.")
+
+    # Lógica para usuário DESLOGADO (simplificada)
     else:
+        st.subheader("Acesse sua conta")
         authenticator.login(fields={'Form name': 'Login'})
+        
         if st.session_state.get("authentication_status") is False:
             st.error("Usuário ou senha incorretos.")
         elif st.session_state.get("authentication_status") is None:
