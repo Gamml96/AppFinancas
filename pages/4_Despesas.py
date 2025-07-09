@@ -33,7 +33,7 @@ with st.form("form_nova_despesa"):
     with col1:
         tipo_pagamento = st.radio("Tipo de Pagamento", ["crédito", "débito"], horizontal=True, key="tipo_pagamento")
         # Ajustamos o help para maior clareza
-        parcelas_input = st.number_input("Nº de Parcelas (Cartão)", min_value=1, step=1, help="Para compras parceladas. Para assinaturas, use a Recorrência ao lado.")
+        parcelas_input = st.number_input("Nº de Parcelas", min_value=1, step=1, help="Para compras parceladas. Para assinaturas, use a Recorrência ao lado.")
     
     with col2:
         recorrencia_freq_input = st.selectbox("Frequência da Recorrência", ["Única", "Diária", "Semanal", "Mensal", "Bimestral", "Trimestral", "Semestral", "Anual"], key="recorrencia_freq")
