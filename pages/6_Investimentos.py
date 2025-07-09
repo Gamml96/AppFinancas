@@ -112,11 +112,29 @@ with tab_portfolio:
 
         st.markdown("---")
         st.markdown("### Detalhes dos Ativos")
-        styled_df = df_portfolio.style.format({
-            'Preço Médio Compra': utils.formatar_moeda_brl, 'Custo Total': utils.formatar_moeda_brl,
-            'Preço Atual': utils.formatar_moeda_brl, 'Valor de Mercado': utils.formatar_moeda_brl,
-            'Lucro/Prejuízo R$': utils.formatar_moeda_brl, 'Rentabilidade %': '{:.2f}%'
+
+        # --- INÍCIO DA ALTERAÇÃO ---
+        # 1. Define a lista de colunas que queremos manter na visualização
+        colunas_para_exibir = [
+            'Código', 'Tipo', 'Quantidade Total', 'Preço Médio Compra',
+            'Custo Total', 'Preço Atual', 'Valor de Mercado',
+            'Lucro/Prejuízo R$', 'Rentabilidade %'
+        ]
+        
+        # 2. Cria um novo DataFrame apenas com as colunas desejadas
+        df_display = df_portfolio[colunas_para_exibir]
+
+        # 3. Aplica o estilo e a formatação no novo DataFrame
+        styled_df = df_display.style.format({
+            'Preço Médio Compra': utils.formatar_moeda_brl,
+            'Custo Total': utils.formatar_moeda_brl,
+            'Preço Atual': utils.formatar_moeda_brl,
+            'Valor de Mercado': utils.formatar_moeda_brl,
+            'Lucro/Prejuízo R$': utils.formatar_moeda_brl,
+            'Rentabilidade %': '{:.2f}%'
         }).hide(axis="index")
+        
+        # 4. Exibe o DataFrame estilizado e limpo
         st.dataframe(styled_df, use_container_width=True)
 
 # --- ABA 2: GERENCIAR TRANSAÇÕES (EDIÇÃO E CADASTRO) ---
