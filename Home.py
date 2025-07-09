@@ -50,12 +50,15 @@ def render_home_page(user_id):
                     categoria_nome = st.selectbox("Categoria", options=categorias_list, key="pop_rec_cat")
 
                     if st.form_submit_button("Salvar Receita"):
-                        if descricao.strip() and valor > 0:
-                            database.insert_receita(user_id, contas_dict[conta_nome], data.isoformat(), valor, categoria_nome, descricao.strip())
-                            st.toast("Receita adicionada!", icon="✅")
-                            st.rerun()
+                        if not descricao.strip() or valor <=0:
+                            st.warning("Descrição é obrigatória e o valor deve ser positivo.")
                         else:
-                            st.warning("Preencha todos os campos.")
+                            try:
+                                database.insert_receita(user_id, contas_dict[conta_nome], data.isoformat(), valor, categoria_nome, descricao.strip())
+                                st.toast("Receita adicionada!", icon="✅")
+                                st.rerun()
+                            except:
+                                st.error(f"Ocorreu um erro ao salvar a despesa: {e}")
 
     # Botão para Adicionar Despesa
     with col2:
@@ -78,12 +81,15 @@ def render_home_page(user_id):
                     categoria = st.selectbox("Categoria", options=categorias_list_desp, key="pop_desp_cat")
 
                     if st.form_submit_button("Salvar Despesa"):
-                        if descricao.strip() and valor > 0:
-                            database.insert_despesa(user_id, contas_dict_desp[conta_nome], data_compra.isoformat(), valor, categoria, tipo_pagamento, parcelas, descricao.strip())
-                            st.toast("Despesa adicionada!", icon="✅")
-                            st.rerun()
+                        if not descricao.strip() or valor > 0:
+                            st.warning("Descrição é obrigatória e o valor deve ser positivo.")
                         else:
-                            st.warning("Preencha todos os campos.")
+                            try:
+                                database.insert_despesa(user_id, contas_dict_desp[conta_nome], data_compra.isoformat(), valor, categoria, tipo_pagamento, parcelas, descricao.strip())
+                                st.toast("Despesa adicionada!", icon="✅")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Ocorreu um erro ao salvar a despesa: {e}")
     with col3:
         with st.popover("🔄 Transferir Entre Contas", use_container_width=True):
             st.markdown("#### Nova Transferência")
@@ -198,7 +204,7 @@ def render_home_page(user_id):
         styled_df = df_display.style.apply(highlight_today, axis=1).format({"entradas": utils.formatar_moeda_brl, "saidas": utils.formatar_moeda_brl, "saldo_acumulado": utils.formatar_moeda_brl}).hide(axis="index")
         st.dataframe(styled_df, column_config={"data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"), "entradas": st.column_config.NumberColumn("Entradas"), "saidas": st.column_config.NumberColumn("Saídas"), "saldo_acumulado": st.column_config.NumberColumn("Saldo do Dia")}, use_container_width=True,hide_index=True)
 
-# --- LÓGICA PRINCIPAL DE AUTENTICAÇÃO ---
+
 # --- LÓGICA PRINCIPAL DE AUTENTICAÇÃO ---
 def main():
     st.set_page_config("App Finanças", layout="wide", initial_sidebar_state="collapsed")
