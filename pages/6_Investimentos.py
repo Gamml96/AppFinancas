@@ -247,7 +247,7 @@ with tab_transacoes:
 # --- ABA 3: ATIVOS (CRIAÇÃO E GERENCIAMENTO) ---
 with tab_ativos:
     st.markdown("### Cadastrar Novo Ativo")
-    with st.form("form_novo_ativo"):
+    with st.form("form_novo_ativo_2"):
         st.markdown("#### Detalhes do Novo Ativo")
         tipos_investimento = database.get_tipos_investimento()
         tipos_dict = {tipo[1]: tipo[0] for tipo in tipos_investimento}
