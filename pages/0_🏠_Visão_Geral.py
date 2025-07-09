@@ -39,6 +39,7 @@ st.markdown("### Acesso Rápido")
 col1, col2, col3 = st.columns(3)
 
 # Botão para Adicionar Receita
+# Botão para Adicionar Receita
 with col1:
     with st.popover("➕ Adicionar Receita", use_container_width=True):
         st.markdown("#### Nova Receita")
@@ -60,8 +61,12 @@ with col1:
                         st.warning("Descrição é obrigatória e o valor deve ser positivo.")
                     else:
                         try:
-                            # A lógica de recorrência não está no popover, então passamos None/1
-                            database.insert_receita(user_id, contas_dict_rec[conta_nome_rec], data_rec.isoformat(), valor_rec, categoria_nome_rec, descricao_rec.strip(), None, 1)
+                            # CORREÇÃO: Passando os parâmetros de recorrência como padrão (None e 1)
+                            database.insert_receita(
+                                user_id, contas_dict_rec[conta_nome_rec], data_rec.isoformat(), 
+                                valor_rec, categoria_nome_rec, descricao_rec.strip(), 
+                                None, 1  # Lançamento único
+                            )
                             st.toast("Receita adicionada!", icon="✅")
                             st.rerun()
                         except Exception as e:
@@ -91,8 +96,12 @@ with col2:
                         st.warning("Descrição é obrigatória e o valor deve ser positivo.")
                     else:
                         try:
-                            # A lógica de recorrência não está no popover, então passamos None/1
-                            database.insert_despesa(user_id, contas_dict_desp[conta_nome_desp], data_compra_desp.isoformat(), valor_desp, categoria_desp, tipo_pagamento_desp, parcelas_desp, descricao_desp.strip(), None, 1)
+                            # CORREÇÃO: Passando os parâmetros de recorrência como padrão (None e 1)
+                            database.insert_despesa(
+                                user_id, contas_dict_desp[conta_nome_desp], data_compra_desp.isoformat(), 
+                                valor_desp, categoria_desp, tipo_pagamento_desp, parcelas_desp, 
+                                descricao_desp.strip(), None, 1 # Lançamento único, sem recorrência
+                            )
                             st.toast("Despesa adicionada!", icon="✅")
                             st.rerun()
                         except Exception as e:
