@@ -310,61 +310,60 @@ def delete_receita(receita_id, user_id):
     st.cache_data.clear()
 
 # -------- Despesas --------
+
 def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pagamento, parcelas, descricao, recorrencia_freq=None, recorrencia_vezes=1):
     """
-    Insere uma ou mais despesas, lidando com parcelas, recorrências (débito e crédito) ou lançamentos únicos.
+    Insere uma ou mais despesas, tratando recorrência e parcelamento como mutuamente exclusivos.
     """
-    valor_total = float(valor)
+    valor_float = float(valor)
     data_compra_obj = datetime.datetime.strptime(data_compra_str, "%Y-%m-%d").date()
     grupo_id = int(time.time() * 1000)
     
     dados_para_inserir = []
 
-    # --- LÓGICA PRINCIPAL: RECORRÊNCIA ---
-    if recorrencia_freq and recorrencia_vezes > 0:
+    # --- DECISÃO LÓGICA: Recorrência tem prioridade sobre parcelamento ---
+    # Consideramos uma recorrência se a frequência for definida e houver mais de uma repetição.
+    is_recorrencia = recorrencia_freq is not None and recorrencia_vezes > 1
+
+    # --- CAMINHO 1: A LÓGICA DE RECORRÊNCIA ---
+    if is_recorrencia:
         delta = RECORRENCIA_MAP.get(recorrencia_freq)
         if not delta: raise ValueError("Frequência de recorrência inválida.")
         
-        # Se for crédito, precisamos dos detalhes do cartão para calcular os vencimentos
         dia_vencimento, dias_fechamento = None, None
         if tipo_pagamento == 'crédito':
             contas = get_contas(user_id)
-            conta_info_list = [c for c in contas if c[0] == conta_id]
-            if not conta_info_list: raise ValueError("Conta de crédito não encontrada.")
-            conta_info = conta_info_list[0]
+            conta_info = next((c for c in contas if c[0] == conta_id), None)
+            if not conta_info: raise ValueError("Conta de crédito não encontrada.")
             dia_vencimento, dias_fechamento = conta_info[2], conta_info[5]
 
         for i in range(recorrencia_vezes):
-            # Calcula a data da "compra" para cada ocorrência futura
             data_lancamento = data_compra_obj + (delta * i)
-            
-            # Determina a data de vencimento
-            vencimento_final = data_lancamento  # Padrão para débito
+            vencimento_final = data_lancamento
             if tipo_pagamento == 'crédito':
-                # NOVO: Calcula o vencimento da fatura para CADA ocorrência
                 vencimento_final = _calcular_vencimento_credito(data_lancamento, dia_vencimento, dias_fechamento)
 
-            desc_recorrencia = f"{descricao} ({i+1}/{recorrencia_vezes})" if recorrencia_vezes > 1 else descricao
+            desc_recorrencia = f"{descricao} ({i+1}/{recorrencia_vezes})"
             
+            # Adiciona a despesa recorrente. Note que 'parcelas' é fixado em 1.
             dados_para_inserir.append((
                 user_id, conta_id, data_lancamento.isoformat(), vencimento_final.isoformat(),
-                valor_total, categoria, tipo_pagamento, 1, # Parcela é sempre 1 para recorrência
+                valor_float, categoria, tipo_pagamento, 1, # Parcela é sempre 1 para recorrência
                 desc_recorrencia, recorrencia_freq, grupo_id
             ))
             
-    # --- LÓGICA SECUNDÁRIA: PARCELAMENTO (ou lançamento único) ---
+    # --- CAMINHO 2: A LÓGICA DE PARCELAMENTO (ou lançamento único) ---
     else:
-        # Esta parte lida com compras parceladas no cartão ou lançamentos únicos no débito
-        valor_parcela_padrao = round(valor_total / parcelas, 2)
-        diferenca = round(valor_total - (valor_parcela_padrao * parcelas), 2)
+        # Se não for recorrência, usamos a lógica de parcelas (que pode ser 1 para um lançamento único).
+        valor_parcela_padrao = round(valor_float / parcelas, 2)
+        diferenca = round(valor_float - (valor_parcela_padrao * parcelas), 2)
         valor_primeira_parcela = valor_parcela_padrao + diferenca
         
         primeiro_vencimento = data_compra_obj
         if tipo_pagamento == 'crédito':
             contas = get_contas(user_id)
-            conta_info_list = [c for c in contas if c[0] == conta_id]
-            if not conta_info_list: raise ValueError("Conta de crédito não encontrada.")
-            conta_info = conta_info_list[0]
+            conta_info = next((c for c in contas if c[0] == conta_id), None)
+            if not conta_info: raise ValueError("Conta de crédito não encontrada.")
             dia_vencimento, dias_fechamento = conta_info[2], conta_info[5]
             primeiro_vencimento = _calcular_vencimento_credito(data_compra_obj, dia_vencimento, dias_fechamento)
 
@@ -372,13 +371,15 @@ def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pa
             valor_a_inserir = valor_primeira_parcela if i == 0 else valor_parcela_padrao
             vencimento_parcela = primeiro_vencimento + relativedelta(months=i)
             desc_parcela = f"{descricao} ({i+1}/{parcelas})" if parcelas > 1 else descricao
+            
+            # Adiciona a despesa parcelada.
             dados_para_inserir.append((
                 user_id, conta_id, data_compra_str, vencimento_parcela.isoformat(),
                 valor_a_inserir, categoria, tipo_pagamento, i + 1,
                 desc_parcela, None, grupo_id if parcelas > 1 else None
             ))
 
-    # Executa a inserção em lote no banco de dados
+    # Executa a inserção em lote no banco de dados (código inalterado)
     if dados_para_inserir:
         _execute_query(
             "INSERT INTO despesas (user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao, recorrencia, parcela_grupo_id) VALUES %s",
@@ -386,17 +387,7 @@ def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pa
             commit=True
         )
     st.cache_data.clear()
-
-    # Executa a inserção em lote
-    if dados_para_inserir:
-        _execute_query(
-            "INSERT INTO despesas (user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao, recorrencia, parcela_grupo_id) VALUES %s",
-            executemany_params=dados_para_inserir,
-            commit=True
-        )
-    st.cache_data.clear()
-
-@st.cache_data
+    
 def get_despesas(user_id):
     """
     Busca todas as despesas de um usuário, garantindo que TODAS as 12 colunas sejam retornadas.
