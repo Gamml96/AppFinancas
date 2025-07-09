@@ -63,7 +63,7 @@ with st.form("form_nova_despesa"):
             # Chamada para o banco de dados com os dados JÁ LIMPOS E VALIDADOS.
             try:
                 database.insert_despesa(
-                    user_id=st.session_state.user_id,
+                    user_id=user_id,
                     conta_id=contas_dict[conta_nome],
                     data_compra_str=data_compra.isoformat(),
                     valor=valor,
