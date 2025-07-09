@@ -212,41 +212,7 @@ def main():
     if not st.session_state.get("authentication_status"):
         st.markdown(hide_sidebar_nav_css, unsafe_allow_html=True)
 
-    credentials = database.get_authenticator_credentials()
-    
-    authenticator = stauth.Authenticate(
-        credentials, 
-        cookie_name="app_fin_cookie",
-        key="app_fin_key", 
-        cookie_expiry_days=30
-    )
-
-    # Lógica para usuário LOGADO
-    if st.session_state.get("authentication_status"):
-        username = st.session_state['username']
-        
-        with st.sidebar:
-            st.subheader(f"Bem-vindo, {st.session_state['name']}!")
-            st.markdown("---")
-            authenticator.logout("Logout", "sidebar", key="logout_button")
-        
-        # Renderiza a página Home
-        profile = database.get_user_profile(username)
-        if profile:
-            user_id = profile['user_id']
-            render_home_page(user_id)
-        else:
-            st.error("Erro ao carregar perfil do usuário.")
-
-    # Lógica para usuário DESLOGADO (sem cadastro)
-    else:
-        st.subheader("Acesse sua conta")
-        authenticator.login(fields={'Form name': 'Login'})
-        
-        if st.session_state.get("authentication_status") is False:
-            st.error("Usuário ou senha incorretos.")
-        elif st.session_state.get("authentication_status") is None:
-            st.warning("Por favor, insira seu usuário e senha.")
+    profile, user_id, username, credentials, authenticator = utils.check_authentication()
 
 if __name__ == "__main__":
     main()
