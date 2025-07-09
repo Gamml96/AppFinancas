@@ -166,6 +166,7 @@ with tab_transacoes:
                 else:
                     st.warning("Preencha todos os campos corretamente.")
     with st.expander("Não encontrou seu ativo? Cadastre um novo aqui"):
+        pass
 
     st.markdown("---")
     st.markdown("### Histórico de Transações")
