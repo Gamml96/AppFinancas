@@ -165,7 +165,7 @@ transacoes = database.get_transacoes_consolidadas(user_id, conta_id=conta_id_fil
 
 if not transacoes:
     st.info("Você ainda não possui transações para exibir o fluxo de caixa.")
-    return
+
 
 df = pd.DataFrame(transacoes, columns=["data", "descricao", "valor"])
 df["data"] = pd.to_datetime(df["data"])
