@@ -338,8 +338,16 @@ def delete_despesa(despesa_id, user_id):
 def get_tipos_investimento():
     return _execute_query("SELECT tipo_id, nome FROM tipos_investimento ORDER BY nome", fetch='all')
 
-def add_investimento(user_id, tipo_id, codigo, descricao):
-    _execute_query("INSERT INTO investimentos (user_id, tipo_id, codigo, descricao) VALUES (%s, %s, %s, %s) ON CONFLICT (user_id, codigo) DO NOTHING", (user_id, tipo_id, codigo.upper(), descricao), commit=True)
+def add_investimento(user_id, tipo_id, codigo, descricao, indexador=None, taxa_percentual=None, data_vencimento=None):
+    # Converte data de vencimento para string se não for nula
+    data_vencimento_str = data_vencimento.isoformat() if data_vencimento else None
+    query = """
+        INSERT INTO investimentos (user_id, tipo_id, codigo, descricao, indexador, taxa_percentual, data_vencimento) 
+        VALUES (%s, %s, %s, %s, %s, %s, %s) 
+        ON CONFLICT (user_id, codigo) DO NOTHING
+    """
+    params = (user_id, tipo_id, codigo.upper(), descricao, indexador, taxa_percentual, data_vencimento_str)
+    _execute_query(query, params)
     st.cache_data.clear()
 
 def get_or_create_investimento(user_id, codigo, tipo_nome, descricao=""):
@@ -373,17 +381,19 @@ def add_transacao_investimento(investimento_id, tipo_transacao, data, quantidade
 
 @st.cache_data
 def get_portfolio_consolidado(user_id):
+    # A query agora inclui as novas colunas
     query = """
         SELECT
-            i.codigo, i.descricao, ti.nome as tipo,
+            i.investimento_id, i.codigo, i.descricao, ti.nome as tipo,
             SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) as quantidade_total,
-            SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade * t.preco_unitario ELSE 0 END) / NULLIF(SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE 0 END), 0) as preco_medio_compra
+            SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade * t.preco_unitario ELSE 0 END) / NULLIF(SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE 0 END), 0) as preco_medio_compra,
+            i.indexador, i.taxa_percentual, i.data_vencimento
         FROM investimentos i
-        JOIN transacoes_investimento t ON i.investimento_id = t.investimento_id
+        LEFT JOIN transacoes_investimento t ON i.investimento_id = t.investimento_id
         JOIN tipos_investimento ti ON i.tipo_id = ti.tipo_id
         WHERE i.user_id = %s
         GROUP BY i.investimento_id, i.codigo, i.descricao, ti.nome
-        HAVING SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) > 0
+        HAVING SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) > 0 OR SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) IS NULL
         ORDER BY i.codigo
     """
     return _execute_query(query, (user_id,), fetch='all')
@@ -405,6 +415,12 @@ def update_transacao_investimento(transacao_id, data, quantidade, preco_unitario
 def delete_transacao_investimento(transacao_id):
     _execute_query("DELETE FROM transacoes_investimento WHERE transacao_id = %s", (transacao_id,), commit=True)
     st.cache_data.clear()
+
+@st.cache_data
+def get_transacoes_por_investimento_id(investimento_id):
+    """Busca as transações de um único ativo, útil para Renda Fixa."""
+    query = "SELECT data, quantidade, preco_unitario FROM transacoes_investimento WHERE investimento_id = %s AND tipo_transacao = 'compra' ORDER BY data"
+    return _execute_query(query, (investimento_id,), fetch='all')
     
 # --- Orçamento ---
 

@@ -44,29 +44,51 @@ tab_portfolio, tab_gerenciar = st.tabs(["Meu Portfólio", "Gerenciar Transaçõe
 # --- ABA 1: MEU PORTFÓLIO (VISUALIZAÇÃO) ---
 with tab_portfolio:
     st.markdown("### Visão Geral da Carteira")
+    # A função no DB foi atualizada para retornar os novos campos de Renda Fixa
     portfolio = database.get_portfolio_consolidado(user_id)
 
     if not portfolio:
         st.info("Você ainda não possui investimentos registrados ou sua posição está zerada.")
         st.write("Vá para a aba 'Gerenciar Transações' para adicionar seus ativos e operações.")
     else:
-        df_portfolio = pd.DataFrame(portfolio, columns=['Código', 'Descrição', 'Tipo', 'Quantidade Total', 'Preço Médio Compra'])
+        df_portfolio = pd.DataFrame(portfolio, columns=['ID', 'Código', 'Descrição', 'Tipo', 'Quantidade Total', 'Preço Médio Compra', 'Indexador', 'Taxa %', 'Vencimento'])
         
-        progress_bar = st.progress(0, text="Buscando cotações...")
-        df_portfolio['Preço Atual'] = 0.0
+        df_portfolio['Valor de Mercado'] = 0.0
         
+        progress_bar = st.progress(0, text="Buscando cotações e calculando rendimentos...")
+        total_rows = len(df_portfolio)
+
         for i, row in df_portfolio.iterrows():
-            preco_atual = utils.get_current_price(row['Código'], row['Tipo'])
-            df_portfolio.at[i, 'Preço Atual'] = preco_atual
-            progress_bar.progress((i + 1) / len(df_portfolio), text=f"Buscando cotação para {row['Código']}...")
-        
+            # Lógica para Renda Variável
+            if row['Tipo'] in ['Ação BR', 'Ação EUA', 'FII', 'Criptomoeda']:
+                preco_atual = utils.get_current_price(row['Código'], row['Tipo'])
+                df_portfolio.at[i, 'Preço Atual'] = preco_atual
+                df_portfolio.at[i, 'Valor de Mercado'] = row['Quantidade Total'] * preco_atual
+            
+            # Lógica para Renda Fixa atrelada ao CDI
+            elif row['Tipo'] == 'Renda Fixa' and row['Indexador'] == 'CDI':
+                transacoes = database.get_transacoes_por_investimento_id(row['ID'])
+                if transacoes:
+                    # Usa a primeira transação de compra como base
+                    data_aporte, _, valor_aporte = transacoes[0]
+                    hoje = utils.get_local_today()
+
+                    if data_aporte < hoje:
+                        fator_cdi = utils.get_cdi_acumulado(data_aporte, hoje)
+                        # Aplica o rendimento do CDI sobre o valor do aporte inicial
+                        valor_atualizado = valor_aporte * fator_cdi * (row['Taxa %'] / 100)
+                        df_portfolio.at[i, 'Valor de Mercado'] = valor_atualizado
+                        df_portfolio.at[i, 'Preço Atual'] = valor_atualizado # Para RF, o preço atual é o valor total
+                    else: # Se a data do aporte for futura, o valor de mercado é o inicial
+                        df_portfolio.at[i, 'Valor de Mercado'] = valor_aporte
+                        df_portfolio.at[i, 'Preço Atual'] = valor_aporte
+
+
+            progress_bar.progress((i + 1) / total_rows, text=f"Analisando {row['Código']}...")
         progress_bar.empty()
 
         df_portfolio['Custo Total'] = df_portfolio['Quantidade Total'] * df_portfolio['Preço Médio Compra']
-        df_portfolio['Valor de Mercado'] = df_portfolio['Quantidade Total'] * df_portfolio['Preço Atual']
         df_portfolio['Lucro/Prejuízo R$'] = df_portfolio['Valor de Mercado'] - df_portfolio['Custo Total']
-        
-        # Evita divisão por zero se o custo for 0
         df_portfolio['Rentabilidade %'] = (df_portfolio['Lucro/Prejuízo R$'] / df_portfolio['Custo Total'].replace(0, 1)) * 100
 
         custo_total_carteira = df_portfolio['Custo Total'].sum()
@@ -82,8 +104,9 @@ with tab_portfolio:
         st.markdown("### Alocação da Carteira")
         
         tipo_agrupamento = st.selectbox("Agrupar por:", ["Tipo de Ativo", "Ativo Individual"])
-        df_agrupado = df_portfolio.groupby(tipo_agrupamento.split(' ')[0])['Valor de Mercado'].sum().reset_index()
-        fig = px.pie(df_agrupado, names=tipo_agrupamento.split(' ')[0], values='Valor de Mercado', title=f'Alocação por {tipo_agrupamento}', hole=.3)
+        coluna_agrupamento = 'Tipo' if tipo_agrupamento == 'Tipo de Ativo' else 'Código'
+        df_agrupado = df_portfolio.groupby(coluna_agrupamento)['Valor de Mercado'].sum().reset_index()
+        fig = px.pie(df_agrupado, names=coluna_agrupamento, values='Valor de Mercado', title=f'Alocação por {tipo_agrupamento}', hole=.3)
         st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("---")
@@ -93,7 +116,7 @@ with tab_portfolio:
             'Preço Atual': utils.formatar_moeda_brl, 'Valor de Mercado': utils.formatar_moeda_brl,
             'Lucro/Prejuízo R$': utils.formatar_moeda_brl, 'Rentabilidade %': '{:.2f}%'
         }).hide(axis="index")
-        st.dataframe(styled_df, use_container_width=True,hide_index=True)
+        st.dataframe(styled_df, use_container_width=True)
 
 # --- ABA 2: GERENCIAR TRANSAÇÕES (EDIÇÃO E CADASTRO) ---
 with tab_gerenciar:
@@ -125,15 +148,24 @@ with tab_gerenciar:
             tipos_investimento = database.get_tipos_investimento()
             tipos_dict = {tipo[1]: tipo[0] for tipo in tipos_investimento}
             
-            novo_codigo = st.text_input("Código do Ativo (ex: PETR4, BTC-USD, MXRF11)")
-            nova_descricao = st.text_input("Descrição (ex: Petrobras PN, Bitcoin)")
+            novo_codigo = st.text_input("Código/Apelido do Ativo (ex: PETR4, CDB Banco X)")
+            nova_descricao = st.text_input("Descrição (ex: Petrobras PN, CDB 105% CDI)")
             novo_tipo_nome = st.selectbox("Tipo de Investimento", options=list(tipos_dict.keys()))
             
+            # Campos condicionais para Renda Fixa
+            indexador = None
+            taxa_percentual = None
+            data_vencimento = None
+            if novo_tipo_nome == 'Renda Fixa':
+                indexador = st.selectbox("Indexador", ["CDI", "IPCA", "Prefixado"])
+                taxa_percentual = st.number_input(f"Taxa/Percentual do {indexador}", min_value=0.0, format="%.2f")
+                data_vencimento = st.date_input("Data de Vencimento", value=utils.get_local_today() + relativedelta(years=2))
+
             if st.form_submit_button("Cadastrar Novo Ativo"):
                 try:
                     tipo_id = tipos_dict[novo_tipo_nome]
-                    database.add_investimento(user_id, tipo_id, novo_codigo, nova_descricao)
-                    st.success(f"Ativo {novo_codigo.upper()} cadastrado com sucesso! Atualize a página ou selecione-o na lista acima.")
+                    database.add_investimento(user_id, tipo_id, novo_codigo, nova_descricao, indexador, taxa_percentual, data_vencimento)
+                    st.success(f"Ativo {novo_codigo.upper()} cadastrado com sucesso!")
                     st.rerun()
                 except ValueError as e:
                     st.error(e)
@@ -146,34 +178,21 @@ with tab_gerenciar:
         st.info("Nenhuma transação registrada.")
     else:
         df_transacoes = pd.DataFrame(todas_transacoes, columns=["ID", "Código", "Tipo", "Data", "Quantidade", "Preço Unitário"])
-        df_transacoes["Data"] = pd.to_datetime(df_transacoes["Data"]).dt.date
         df_transacoes["Excluir"] = False
 
-        edited_df = st.data_editor(
-            df_transacoes,
-            use_container_width=True,
-            hide_index=True,
+        edited_df = st.data_editor(df_transacoes, use_container_width=True, hide_index=True,
             column_config={
-                "ID": None,
-                "Código": st.column_config.TextColumn("Código", disabled=True),
-                "Tipo": st.column_config.TextColumn("Tipo", disabled=False),
+                "ID": None, "Código": st.column_config.TextColumn(disabled=True), "Tipo": st.column_config.TextColumn(disabled=True),
                 "Data": st.column_config.DateColumn("Data", required=True),
-                "Quantidade": st.column_config.NumberColumn("Quantidade", format="%.8f", required=True),
+                "Quantidade": st.column_config.NumberColumn(format="%.8f", required=True),
                 "Preço Unitário": st.column_config.NumberColumn("Preço Unitário", format="R$ %.2f", required=True),
                 "Excluir": st.column_config.CheckboxColumn("Excluir?", default=False)
-            },
-            key="editor_transacoes"
-        )
+            }, key="editor_transacoes")
 
         col_save, col_delete = st.columns(2)
         if col_save.button("Salvar Alterações nas Transações"):
             for _, row in edited_df.iterrows():
-                database.update_transacao_investimento(
-                    transacao_id=int(row["ID"]),
-                    data=row["Data"].isoformat(),
-                    quantidade=float(row["Quantidade"]),
-                    preco_unitario=float(row["Preço Unitário"])
-                )
+                database.update_transacao_investimento(int(row["ID"]), row["Data"].isoformat(), float(row["Quantidade"]), float(row["Preço Unitário"]))
             st.success("Alterações salvas com sucesso!")
             st.rerun()
 
