@@ -165,6 +165,85 @@ with tab_transacoes:
                     st.rerun()
                 else:
                     st.warning("Preencha todos os campos corretamente.")
+    with st.expander("Não encontrou seu ativo? Cadastre um novo aqui"):
+        st.markdown("### Cadastrar Novo Ativo")
+        with st.form("form_novo_ativo"):
+                    st.markdown("#### Detalhes do Novo Ativo")
+                    tipos_investimento = database.get_tipos_investimento()
+                    tipos_dict = {tipo[1]: tipo[0] for tipo in tipos_investimento}
+                    
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        novo_codigo = st.text_input("Código/Apelido do Ativo (ex: PETR4, CDB Banco X)")
+                        novo_tipo_nome = st.selectbox("Tipo de Investimento", options=list(tipos_dict.keys()))
+                    with col_b:
+                        nova_descricao = st.text_input("Descrição (ex: Petrobras PN, CDB 105% CDI)")
+
+                    # Campos condicionais que aparecem apenas para Renda Fixa
+                    indexador = None
+                    taxa_percentual = None
+                    data_vencimento = None
+                    if novo_tipo_nome == 'Renda Fixa':
+                        st.markdown("##### Detalhes da Renda Fixa")
+                        col_c, col_d, col_e = st.columns(3)
+                        with col_c:
+                            indexador = st.selectbox("Indexador", ["CDI", "IPCA", "Prefixado"])
+                        with col_d:
+                            taxa_percentual = st.number_input(f"Taxa % do {indexador}", min_value=0.0, format="%.2f")
+                        with col_e:
+                            data_vencimento = st.date_input("Data de Vencimento", value=utils.get_local_today() + relativedelta(years=2))
+
+                    if st.form_submit_button("Cadastrar Novo Ativo"):
+                        if novo_codigo and novo_tipo_nome:
+                            try:
+                                tipo_id = tipos_dict[novo_tipo_nome]
+                                # Chama a função do banco de dados passando os novos parâmetros
+                                database.add_investimento(
+                                    user_id, tipo_id, novo_codigo, nova_descricao, 
+                                    indexador, taxa_percentual, data_vencimento
+                                )
+                                st.success(f"Ativo {novo_codigo.upper()} cadastrado com sucesso!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro ao cadastrar ativo: {e}")
+                        else:
+                            st.warning("Preencha pelo menos o Código e o Tipo de Investimento.")
+
+    st.markdown("---")
+    st.markdown("### Histórico de Transações")
+    
+    todas_transacoes = database.get_all_transacoes(user_id)
+    if not todas_transacoes:
+        st.info("Nenhuma transação registrada.")
+    else:
+        df_transacoes = pd.DataFrame(todas_transacoes, columns=["ID", "Código", "Tipo", "Data", "Quantidade", "Preço Unitário"])
+        df_transacoes["Excluir"] = False
+
+        edited_df = st.data_editor(df_transacoes, use_container_width=True, hide_index=True,
+            column_config={
+                "ID": None, "Código": st.column_config.TextColumn(disabled=True), "Tipo": st.column_config.TextColumn(disabled=True),
+                "Data": st.column_config.DateColumn("Data", required=True),
+                "Quantidade": st.column_config.NumberColumn(format="%.8f", required=True),
+                "Preço Unitário": st.column_config.NumberColumn("Preço Unitário", format="R$ %.2f", required=True),
+                "Excluir": st.column_config.CheckboxColumn("Excluir?", default=False)
+            }, key="editor_transacoes")
+
+        col_save, col_delete = st.columns(2)
+        if col_save.button("Salvar Alterações nas Transações"):
+            for _, row in edited_df.iterrows():
+                database.update_transacao_investimento(int(row["ID"]), row["Data"].isoformat(), float(row["Quantidade"]), float(row["Preço Unitário"]))
+            st.success("Alterações salvas com sucesso!")
+            st.rerun()
+
+        if col_delete.button("Excluir Transações Selecionadas"):
+            selected_to_delete = edited_df[edited_df["Excluir"]]
+            if not selected_to_delete.empty:
+                for _, row in selected_to_delete.iterrows():
+                    database.delete_transacao_investimento(int(row["ID"]))
+                st.success(f"{len(selected_to_delete)} transação(ões) excluída(s)!")
+                st.rerun()
+            else:
+                st.info("Nenhuma transação selecionada para exclusão.")
 
 # --- ABA 3: ATIVOS (CRIAÇÃO E GERENCIAMENTO) ---
 with tab_ativos:
@@ -262,38 +341,3 @@ with tab_ativos:
             else:
                 st.info("Nenhum ativo selecionado para exclusão.")
 
-    st.markdown("---")
-    st.markdown("### Histórico de Transações")
-    
-    todas_transacoes = database.get_all_transacoes(user_id)
-    if not todas_transacoes:
-        st.info("Nenhuma transação registrada.")
-    else:
-        df_transacoes = pd.DataFrame(todas_transacoes, columns=["ID", "Código", "Tipo", "Data", "Quantidade", "Preço Unitário"])
-        df_transacoes["Excluir"] = False
-
-        edited_df = st.data_editor(df_transacoes, use_container_width=True, hide_index=True,
-            column_config={
-                "ID": None, "Código": st.column_config.TextColumn(disabled=True), "Tipo": st.column_config.TextColumn(disabled=True),
-                "Data": st.column_config.DateColumn("Data", required=True),
-                "Quantidade": st.column_config.NumberColumn(format="%.8f", required=True),
-                "Preço Unitário": st.column_config.NumberColumn("Preço Unitário", format="R$ %.2f", required=True),
-                "Excluir": st.column_config.CheckboxColumn("Excluir?", default=False)
-            }, key="editor_transacoes")
-
-        col_save, col_delete = st.columns(2)
-        if col_save.button("Salvar Alterações nas Transações"):
-            for _, row in edited_df.iterrows():
-                database.update_transacao_investimento(int(row["ID"]), row["Data"].isoformat(), float(row["Quantidade"]), float(row["Preço Unitário"]))
-            st.success("Alterações salvas com sucesso!")
-            st.rerun()
-
-        if col_delete.button("Excluir Transações Selecionadas"):
-            selected_to_delete = edited_df[edited_df["Excluir"]]
-            if not selected_to_delete.empty:
-                for _, row in selected_to_delete.iterrows():
-                    database.delete_transacao_investimento(int(row["ID"]))
-                st.success(f"{len(selected_to_delete)} transação(ões) excluída(s)!")
-                st.rerun()
-            else:
-                st.info("Nenhuma transação selecionada para exclusão.")
