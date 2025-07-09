@@ -329,10 +329,10 @@ def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pa
 
     # --- Busca de dados do cartão (se necessário) ---
     dia_vencimento, dias_fechamento = None, None
-    if tipo_pagamento == 'crédito':
+    if tipo_pagamento == 'Crédito':
         contas = get_contas(user_id)
         conta_info = next((c for c in contas if c[0] == conta_id), None)
-        if not conta_info: raise ValueError("Conta de crédito não encontrada.")
+        if not conta_info: raise ValueError("Conta de Crédito não encontrada.")
         dia_vencimento, dias_fechamento = conta_info[2], conta_info[5]
 
     # --- Loop Único e Centralizado ---
@@ -362,7 +362,7 @@ def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pa
 
         # --- Cálculo de Vencimento (unificado) ---
         vencimento_iteracao = data_compra_iteracao
-        if tipo_pagamento == 'crédito':
+        if tipo_pagamento == 'Crédito':
             if is_recorrencia_mode:
                 vencimento_iteracao = _calcular_vencimento_credito(data_compra_iteracao, dia_vencimento, dias_fechamento)
             else:
@@ -370,8 +370,8 @@ def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pa
                 vencimento_iteracao = primeiro_vencimento + relativedelta(months=i)
         
         # <<< A CORREÇÃO ESTÁ AQUI >>>
-        elif tipo_pagamento == 'débito' and not is_recorrencia_mode:
-            # Para débito parcelado, o vencimento também avança mensalmente, a partir da data da compra.
+        elif tipo_pagamento == 'Débito' and not is_recorrencia_mode:
+            # Para Débito parcelado, o vencimento também avança mensalmente, a partir da data da compra.
             vencimento_iteracao = data_compra_base + relativedelta(months=i)
         
         # Monta o registro para inserção
@@ -450,7 +450,7 @@ def realizar_transferencia(user_id, conta_origem_id, conta_destino_id, valor, da
             cur.execute(
                 """
                 INSERT INTO despesas (user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao)
-                VALUES (%s, %s, %s, %s, %s, %s, 'débito', 1, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, 'Débito', 1, %s)
                 """,
                 (user_id, conta_origem_id, data_iso, data_iso, valor_float, categoria_transferencia, descricao_despesa)
             )
@@ -687,7 +687,7 @@ def get_total_despesas_mensal(user_id):
 @st.cache_data
 def get_fatura_cartao(user_id, conta_id, mes, ano):
     mes_ano_str = f"{ano:04d}-{mes:02d}"
-    query = "SELECT data_compra, descricao, valor FROM despesas WHERE user_id = %s AND conta_id = %s AND tipo_pagamento = 'crédito' AND TO_CHAR(data_vencimento, 'YYYY-MM') = %s ORDER BY data_compra"
+    query = "SELECT data_compra, descricao, valor FROM despesas WHERE user_id = %s AND conta_id = %s AND tipo_pagamento = 'Crédito' AND TO_CHAR(data_vencimento, 'YYYY-MM') = %s ORDER BY data_compra"
     return _execute_query(query, (user_id, conta_id, mes_ano_str), fetch='all')
 
 @st.cache_data

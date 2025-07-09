@@ -31,7 +31,7 @@ with st.form("form_nova_despesa"):
     
     col1, col2 = st.columns(2)
     with col1:
-        tipo_pagamento = st.radio("Tipo de Pagamento", ["crédito", "débito"], horizontal=True, key="tipo_pagamento")
+        tipo_pagamento = st.radio("Tipo de Pagamento", ["Crédito", "Débito"], horizontal=True, key="tipo_pagamento")
         # Ajustamos o help para maior clareza
         parcelas_input = st.number_input("Nº de Parcelas", min_value=1, step=1, help="Para compras parceladas. Para assinaturas, use a Recorrência ao lado.")
     
@@ -96,7 +96,7 @@ edited_df = st.data_editor(df, hide_index=True, use_container_width=True,
     column_config={
         "ID": None, "user_id": None, "conta_id": None, "Parcela": None, "Recorrência": None, "Grupo ID": None,
         "Descrição": st.column_config.TextColumn(required=True),
-        "Tipo": st.column_config.SelectboxColumn(options=["crédito", "débito"], required=True),
+        "Tipo": st.column_config.SelectboxColumn(options=["Crédito", "Débito"], required=True),
         "Valor": st.column_config.NumberColumn(format="R$ %.2f", required=True),
         "Conta": st.column_config.SelectboxColumn(options=list(contas_dict.keys()), required=True),
         "Categoria": st.column_config.SelectboxColumn(options=categorias_list, required=True),
