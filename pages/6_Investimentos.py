@@ -93,7 +93,7 @@ with tab_portfolio:
             'Preço Atual': utils.formatar_moeda_brl, 'Valor de Mercado': utils.formatar_moeda_brl,
             'Lucro/Prejuízo R$': utils.formatar_moeda_brl, 'Rentabilidade %': '{:.2f}%'
         }).hide(axis="index")
-        st.dataframe(styled_df, use_container_width=True)
+        st.dataframe(styled_df, use_container_width=True,hide_index=True)
 
 # --- ABA 2: GERENCIAR TRANSAÇÕES (EDIÇÃO E CADASTRO) ---
 with tab_gerenciar:
