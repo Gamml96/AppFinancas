@@ -381,7 +381,12 @@ def add_transacao_investimento(investimento_id, tipo_transacao, data, quantidade
 
 @st.cache_data
 def get_portfolio_consolidado(user_id):
-    # A query agora inclui as novas colunas
+    """
+    Calcula a posição atual de cada ativo do usuário, mostrando apenas ativos
+    que possuem transações e cuja posição atual é maior que zero.
+    """
+    # A query agora usa INNER JOIN para excluir ativos sem transações
+    # e tem um HAVING simplificado para mostrar apenas posições > 0.
     query = """
         SELECT
             i.investimento_id, i.codigo, i.descricao, ti.nome as tipo,
@@ -389,13 +394,14 @@ def get_portfolio_consolidado(user_id):
             SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade * t.preco_unitario ELSE 0 END) / NULLIF(SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE 0 END), 0) as preco_medio_compra,
             i.indexador, i.taxa_percentual, i.data_vencimento
         FROM investimentos i
-        LEFT JOIN transacoes_investimento t ON i.investimento_id = t.investimento_id
+        INNER JOIN transacoes_investimento t ON i.investimento_id = t.investimento_id
         JOIN tipos_investimento ti ON i.tipo_id = ti.tipo_id
         WHERE i.user_id = %s
         GROUP BY i.investimento_id, i.codigo, i.descricao, ti.nome
-        HAVING SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) > 0 OR SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) IS NULL
+        HAVING SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) > 0.00000001
         ORDER BY i.codigo
     """
+    # Usamos _execute_query que já foi refatorada para o Supabase
     return _execute_query(query, (user_id,), fetch='all')
 
 @st.cache_data
