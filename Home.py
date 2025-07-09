@@ -30,7 +30,7 @@ def render_home_page(user_id):
                 with st.form("form_popover_receita"):
                     descricao = st.text_input("Descrição da Receita", key="pop_rec_desc")
                     valor = st.number_input("Valor", min_value=0.01, format="%.2f", key="pop_rec_val")
-                    data = st.date_input("Data", value=datetime.date.today(), key="pop_rec_data")
+                    data = st.date_input("Data", value=utils.get_local_today(), key="pop_rec_data")
                     conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()), key="pop_rec_conta")
                     categoria_nome = st.selectbox("Categoria", options=categorias_list, key="pop_rec_cat")
 
@@ -56,7 +56,7 @@ def render_home_page(user_id):
                 with st.form("form_popover_despesa"):
                     descricao = st.text_input("Descrição da Despesa", key="pop_desp_desc")
                     valor = st.number_input("Valor Total", min_value=0.01, format="%.2f", key="pop_desp_val")
-                    data_compra = st.date_input("Data da Compra", value=datetime.date.today(), key="pop_desp_data")
+                    data_compra = st.date_input("Data da Compra", value=utils.get_local_today(), key="pop_desp_data")
                     tipo_pagamento = st.radio("Pagamento", ["crédito", "débito"], horizontal=True, key="pop_desp_tipo")
                     parcelas = st.number_input("Parcelas", min_value=1, step=1, value=1, key="pop_desp_parc")
                     conta_nome = st.selectbox("Conta", options=list(contas_dict_desp.keys()), key="pop_desp_conta")
@@ -86,7 +86,7 @@ def render_home_page(user_id):
             data_obj = data # A conversão strptime foi removida
             # -----------------------
             
-            hoje = datetime.date.today()
+            hoje = utils.get_local_today()
             
             if data_obj == hoje:
                 dia_str = "Hoje"
@@ -127,7 +127,7 @@ def render_home_page(user_id):
     if not fluxo_diario.empty:
         data_inicio = fluxo_diario['data'].min()
         data_fim_transacoes = fluxo_diario['data'].max()
-        data_fim_hoje = pd.to_datetime(datetime.date.today())
+        data_fim_hoje = pd.to_datetime(utils.get_local_today())
         data_fim = max(data_fim_transacoes, data_fim_hoje)
         todos_os_dias = pd.date_range(start=data_inicio, end=data_fim, freq='D')
         fluxo_diario = fluxo_diario.set_index('data').reindex(todos_os_dias)
@@ -136,7 +136,7 @@ def render_home_page(user_id):
         fluxo_diario['saldo_acumulado'] = fluxo_diario['saldo_dia'].cumsum()
         fluxo_diario = fluxo_diario.reset_index().rename(columns={'index': 'data'})
 
-        saldo_atual_valor = fluxo_diario[fluxo_diario['data'].dt.date <= datetime.date.today()]['saldo_acumulado'].iloc[-1] if not fluxo_diario.empty else 0.0
+        saldo_atual_valor = fluxo_diario[fluxo_diario['data'].dt.date <= utils.get_local_today()]['saldo_acumulado'].iloc[-1] if not fluxo_diario.empty else 0.0
         st.metric("Saldo Atual Consolidado (Hoje)", utils.formatar_moeda_brl(saldo_atual_valor))
         st.markdown("---")
         st.markdown("### Evolução do Saldo")
@@ -145,7 +145,7 @@ def render_home_page(user_id):
         st.markdown("### Detalhamento do Fluxo de Caixa")
 
         def highlight_today(row):
-            if row.data.date() == datetime.date.today():
+            if row.data.date() == utils.get_local_today():
                 return ['background-color: #3D5320'] * len(row)
             return [''] * len(row)
 

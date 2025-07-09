@@ -7,6 +7,7 @@ import psycopg2
 import psycopg2.extras
 import os
 from dotenv import load_dotenv
+import utils
 
 # --- FUNÇÃO CENTRAL DE CONEXÃO ---
 def _get_db_connection():
@@ -437,7 +438,7 @@ def get_proximos_lancamentos(user_id, dias_futuros=7):
         (SELECT data_vencimento, descricao, valor, 'despesa' as tipo FROM despesas WHERE user_id = %s AND data_vencimento BETWEEN %s AND %s)
         ORDER BY data
     """
-    today = datetime.date.today()
+    today = utils.get_local_today()
     end_date = today + datetime.timedelta(days=dias_futuros)
     params = (user_id, today.isoformat(), end_date.isoformat(), user_id, today.isoformat(), end_date.isoformat())
     return _execute_query(query, params, fetch='all')

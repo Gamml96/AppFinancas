@@ -3,6 +3,8 @@ import database
 import yfinance as yf
 import datetime
 from dateutil.relativedelta import relativedelta
+from zoneinfo import ZoneInfo 
+
 
 def formatar_moeda_brl(valor):
     """Formata um número para o padrão de moeda brasileiro (R$ 1.234,56)."""
@@ -76,3 +78,11 @@ def _calcular_vencimento_credito(data_compra_obj, dia_vencimento, dias_fechament
     fechamento_real = _ajustar_data_para_sexta_anterior(fechamento_preliminar)
     if data_compra_obj <= fechamento_real: return vencimento_base
     else: return vencimento_base + relativedelta(months=1)
+
+def get_local_today():
+    """
+    Retorna a data atual baseada no fuso horário de São Paulo (UTC-3).
+    Esta função deve substituir todas as chamadas a datetime.date.today().
+    """
+    sao_paulo_tz = ZoneInfo("America/Sao_Paulo")
+    return datetime.datetime.now(sao_paulo_tz).date()

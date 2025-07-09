@@ -56,7 +56,7 @@ with col1:
     conta_selecionada_id = contas_dict[conta_selecionada_nome]
 
 # Gera uma lista de meses e anos para o selectbox
-meses_anos = sorted(list(set([(datetime.date.today() + relativedelta(months=i)).strftime("%Y-%m") for i in range(-12, 2)])), reverse=True)
+meses_anos = sorted(list(set([(utils.get_local_today() + relativedelta(months=i)).strftime("%Y-%m") for i in range(-12, 2)])), reverse=True)
 
 with col2:
     mes_ano_selecionado = st.selectbox("Selecione a Fatura (Vencimento)", options=meses_anos)

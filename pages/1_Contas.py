@@ -37,7 +37,7 @@ st.title("Gerenciar Contas")
 with st.form("form_nova_conta"):
     st.markdown("### Adicionar Nova Conta")
     nome = st.text_input("Nome da Conta")
-    data_inicial = st.date_input("Data Inicial", value=datetime.date.today())
+    data_inicial = st.date_input("Data Inicial", value=utils.get_local_today())
     saldo_inicial = st.number_input("Saldo Inicial", value=0.0, format="%.2f")
     vencimento = st.number_input("Dia do Vencimento da Fatura", min_value=1, max_value=31, value=1)
     fechamento = st.number_input("Dias antes do vencimento para fechar a fatura", min_value=1, max_value=31, value=10)

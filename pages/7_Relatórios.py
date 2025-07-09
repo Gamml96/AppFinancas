@@ -42,7 +42,7 @@ st.title("Relatórios Financeiros")
 # --- FILTROS ---
 st.markdown("### Filtros")
 # Define o primeiro e o último dia do mês atual como padrão
-today = datetime.date.today()
+today = utils.get_local_today()
 start_of_month = today.replace(day=1)
 end_of_month = (start_of_month + relativedelta(months=1)) - datetime.timedelta(days=1)
 

@@ -48,7 +48,7 @@ with st.form("form_nova_receita"):
     st.markdown("### Adicionar Nova Receita")
     descricao = st.text_input("Descrição")
     valor = st.number_input("Valor", min_value=0.01, format="%.2f")
-    data = st.date_input("Data", value=datetime.date.today())
+    data = st.date_input("Data", value=utils.get_local_today())
     conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()))
     categoria_nome = st.selectbox("Categoria", options=categorias_list)
     

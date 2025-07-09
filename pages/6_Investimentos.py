@@ -106,7 +106,7 @@ with tab_gerenciar:
         with col1:
             ativo_codigo = st.selectbox("Ativo (Código)", options=list(investimentos_dict.keys()), help="Cadastre novos ativos no expander abaixo.")
             tipo_transacao = st.radio("Tipo de Transação", ["compra", "venda"], horizontal=True)
-            data_transacao = st.date_input("Data da Transação", value=datetime.date.today())
+            data_transacao = st.date_input("Data da Transação", value=utils.get_local_today())
         with col2:
             quantidade = st.number_input("Quantidade", min_value=0.0, format="%.8f")
             preco_unitario = st.number_input("Preço Unitário (R$)", min_value=0.0, format="%.2f")

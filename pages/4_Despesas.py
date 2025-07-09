@@ -48,7 +48,7 @@ with st.form("form_nova_despesa"):
     st.markdown("### Adicionar Nova Despesa")
     descricao = st.text_input("Descrição da Despesa")
     valor = st.number_input("Valor Total", min_value=0.01, format="%.2f")
-    data_compra = st.date_input("Data da Compra", value=datetime.date.today())
+    data_compra = st.date_input("Data da Compra", value=utils.get_local_today())
     categoria = st.selectbox("Categoria", options=categorias_list)
     conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()))
     tipo_pagamento = st.radio("Tipo de Pagamento", ["crédito", "débito"], horizontal=True)
