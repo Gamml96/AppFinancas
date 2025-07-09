@@ -13,7 +13,7 @@ profile, user_id, username, credentials, authenticator = utils.check_authenticat
 
 
 # --- Conteúdo da Página ---
-st.title("📊 Visão Geral Financeira")
+st.title("Visão Geral Financeira")
 st.markdown("---")
 
 # --- INÍCIO DA SEÇÃO DE FILTROS ---
