@@ -136,7 +136,7 @@ with tab_portfolio:
         }).hide(axis="index")
         
         # 4. Exibe o DataFrame estilizado e limpo
-        st.dataframe(styled_df, use_container_width=True)
+        st.dataframe(styled_df, use_container_width=True,hide_index=True)
 
 # --- ABA 2: GERENCIAR TRANSAÇÕES (EDIÇÃO E CADASTRO) ---
 with tab_gerenciar:
