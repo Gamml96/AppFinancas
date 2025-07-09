@@ -78,7 +78,7 @@ with tab_portfolio:
                         fator_cdi = utils.get_cdi_acumulado(data_aporte, hoje)
                         # Aplica o rendimento do CDI sobre o valor do aporte inicial
                         valor_atualizado = valor_aporte * fator_cdi * (row['Taxa %'] / 100)
-                        df_portfolio.at[i, 'Valor de Mercado'] = valor_atualizado
+                        df_portfolio.at[i, 'Valor de Mercado'] = valor_atualizado * row['Quantidade Total']
                         df_portfolio.at[i, 'Preço Atual'] = valor_atualizado # Para RF, o preço atual é o valor total
                     else: # Se a data do aporte for futura, o valor de mercado é o inicial
                         df_portfolio.at[i, 'Valor de Mercado'] = valor_aporte
