@@ -13,7 +13,7 @@ def render_home_page(user_id):
 
     # --- INÍCIO DA NOVA SEÇÃO: BOTÕES DE ACESSO RÁPIDO ---
     st.markdown("### Acesso Rápido")
-    col1, col2, col3 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     # Botão para Adicionar Receita
     with col1:
