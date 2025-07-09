@@ -551,17 +551,34 @@ def set_orcamento(user_id, categoria_nome, limite):
 
 # -------- Relatórios e Consolidações --------
 @st.cache_data
-def get_proximos_lancamentos(user_id, dias_futuros=7):
-    query = """
-        (SELECT data, descricao, valor, 'receita' as tipo FROM receitas WHERE user_id = %s AND data BETWEEN %s AND %s)
-        UNION ALL
-        (SELECT data_vencimento, descricao, valor, 'despesa' as tipo FROM despesas WHERE user_id = %s AND data_vencimento BETWEEN %s AND %s)
-        ORDER BY data
+def get_proximos_lancamentos(user_id, dias_futuros=7, conta_id=None):
     """
-    today = utils.get_local_today()
+    Busca receitas e despesas futuras, com filtro opcional por conta.
+    """
+    lancamentos = []
+    today = datetime.date.today()
     end_date = today + datetime.timedelta(days=dias_futuros)
-    params = (user_id, today.isoformat(), end_date.isoformat(), user_id, today.isoformat(), end_date.isoformat())
-    return _execute_query(query, params, fetch='all')
+
+    filtro_sql = " AND conta_id = %s" if conta_id else ""
+    params_base = [user_id]
+    if conta_id:
+        params_base.extend([today.isoformat(), end_date.isoformat(), conta_id])
+    else:
+        params_base.extend([today.isoformat(), end_date.isoformat()])
+
+    conn = _get_db_connection()
+    with conn.cursor() as cur:
+        query_receitas = "SELECT data, descricao, valor, 'receita' as tipo FROM receitas WHERE user_id = %s AND data BETWEEN %s AND %s" + filtro_sql
+        cur.execute(query_receitas, tuple(params_base))
+        lancamentos.extend(cur.fetchall())
+
+        query_despesas = "SELECT data_vencimento, descricao, valor, 'despesa' as tipo FROM despesas WHERE user_id = %s AND data_vencimento BETWEEN %s AND %s" + filtro_sql
+        cur.execute(query_despesas, tuple(params_base))
+        lancamentos.extend(cur.fetchall())
+        
+    conn.close()
+    lancamentos.sort(key=lambda x: x[0])
+    return lancamentos
 
 @st.cache_data
 def get_despesas_por_categoria(user_id, dt_start, dt_end):
@@ -585,16 +602,38 @@ def get_fatura_cartao(user_id, conta_id, mes, ano):
     return _execute_query(query, (user_id, conta_id, mes_ano_str), fetch='all')
 
 @st.cache_data
-def get_transacoes_consolidadas(user_id):
-    conn = _get_db_connection()
+def get_transacoes_consolidadas(user_id, conta_id=None):
+    """
+    Busca e consolida todas as transações, com um filtro opcional por conta.
+    """
     transacoes = []
+    
+    # Constrói a cláusula WHERE dinamicamente
+    filtro_sql = " AND conta_id = %s" if conta_id else ""
+    params_base = [user_id]
+    if conta_id:
+        params_base.append(conta_id)
+    
+    conn = _get_db_connection()
     with conn.cursor() as cur:
-        cur.execute("SELECT data, descricao, valor FROM receitas WHERE user_id = %s", (user_id,))
-        for data, desc, val in cur.fetchall(): transacoes.append((data, desc, val))
-        cur.execute("SELECT data_vencimento, descricao, valor FROM despesas WHERE user_id = %s", (user_id,))
-        for data, desc, val in cur.fetchall(): transacoes.append((data, desc, -val))
-        cur.execute("SELECT data_inicial, nome, saldo_inicial FROM contas WHERE user_id = %s", (user_id,))
+        # Busca Saldos Iniciais (se for uma conta específica, pega só o dela)
+        query_contas = "SELECT data_inicial, nome, saldo_inicial FROM contas WHERE user_id = %s" + filtro_sql
+        cur.execute(query_contas, tuple(params_base))
         for data, nome, saldo in cur.fetchall():
-            if data and saldo > 0: transacoes.append((data, f"Saldo Inicial - {nome}", saldo))
+            if data and saldo != 0:
+                transacoes.append((data, f"Saldo Inicial - {nome}", saldo))
+        
+        # Busca Receitas
+        query_receitas = "SELECT data, descricao, valor FROM receitas WHERE user_id = %s" + filtro_sql
+        cur.execute(query_receitas, tuple(params_base))
+        transacoes.extend(cur.fetchall())
+            
+        # Busca Despesas
+        query_despesas = "SELECT data_vencimento, descricao, valor FROM despesas WHERE user_id = %s" + filtro_sql
+        cur.execute(query_despesas, tuple(params_base))
+        for data, descricao, valor in cur.fetchall():
+            transacoes.append((data, descricao, -valor))
+            
     conn.close()
     return transacoes
+

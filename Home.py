@@ -120,7 +120,8 @@ def render_home_page(user_id):
 
     # Seção de Lançamentos Próximos
     st.markdown("### Lançamentos Próximos")
-    proximos_lancamentos = database.get_proximos_lancamentos(user_id, dias_futuros=3)
+    conta_id_filtro = lista_contas.get(conta_selecionada_nome)
+    proximos_lancamentos = database.get_proximos_lancamentos(user_id, dias_futuros=3, conta_id=conta_id_filtro)
 
     if not proximos_lancamentos:
         st.info("Nenhum lançamento previsto para os próximos 3 dias.")
@@ -150,7 +151,7 @@ def render_home_page(user_id):
     st.markdown("---")
     # Seção do Fluxo de Caixa
     st.header("Fluxo de Caixa Diário")
-    transacoes = database.get_transacoes_consolidadas(user_id)
+    transacoes = database.get_transacoes_consolidadas(user_id, conta_id=conta_id_filtro)
 
     if not transacoes:
         st.info("Você ainda não possui transações para exibir o fluxo de caixa.")
