@@ -62,8 +62,9 @@ else:
 st.markdown("---")
 st.markdown("### Acompanhamento do Orçamento no Período")
 
-# 1. Pega os gastos e os orçamentos
-gastos_no_periodo = df_despesas_cat # Reutiliza o DataFrame do gráfico de pizza
+# 1. Pega os gastos e os orçamentos (código existente)
+# A função get_despesas_por_categoria já foi chamada no início do script.
+df_despesas_cat = pd.DataFrame(despesas_cat, columns=['Categoria', 'Total']) if despesas_cat else pd.DataFrame(columns=['Categoria', 'Total'])
 orcamentos = database.get_orcamentos(user_id)
 df_orcamentos = pd.DataFrame(orcamentos, columns=['Categoria', 'Orçamento'])
 
@@ -71,27 +72,47 @@ if df_orcamentos.empty:
     st.info("Você ainda não definiu nenhum orçamento. Vá para a página 'Orçamento' para começar.")
 else:
     # 2. Junta as informações de gastos e orçamentos
-    df_comparativo = pd.merge(gastos_no_periodo, df_orcamentos, on='Categoria', how='left').fillna(0)
+    # Usamos um 'outer' join para incluir categorias com orçamento mas sem gastos no período
+    df_comparativo = pd.merge(df_orcamentos, df_despesas_cat, on='Categoria', how='outer').fillna(0)
+    
     # Filtra apenas as categorias que têm um orçamento definido > 0
-    df_comparativo = df_comparativo[df_comparativo['Orçamento'] > 0]
+    df_comparativo = df_comparativo[df_comparativo['Orçamento'] > 0].reset_index(drop=True)
 
     if df_comparativo.empty:
         st.info("Nenhum gasto nas categorias com orçamento definido para este período.")
     else:
-        df_comparativo['Progresso'] = df_comparativo['Total'] / df_comparativo['Orçamento']
+        # Calcula as colunas de progresso e restante
+        # Adicionado um tratamento para evitar divisão por zero se o orçamento for 0
+        df_comparativo['Progresso'] = (df_comparativo['Total'] / df_comparativo['Orçamento']).where(df_comparativo['Orçamento'] > 0, 0)
         df_comparativo['Restante'] = df_comparativo['Orçamento'] - df_comparativo['Total']
 
-        # 3. Mostra as barras de progresso
+        # --- INÍCIO DA NOVA VISUALIZAÇÃO APRIMORADA ---
+
         for _, row in df_comparativo.iterrows():
-            st.markdown(f"**{row['Categoria']}**")
-            gasto_fmt = utils.formatar_moeda_brl(row['Total'])
-            orcamento_fmt = utils.formatar_moeda_brl(row['Orçamento'])
+            st.markdown(f"#### {row['Categoria']}")
             
-            # Muda a cor do texto se o gasto estourou o orçamento
-            if row['Progresso'] > 1:
-                st.error(f"Gasto: {gasto_fmt} de {orcamento_fmt}")
+            progresso = row['Progresso']
+            
+            # Lógica para definir a cor e o status com base no progresso
+            if progresso > 1:
+                status_color_method = st.error
+                status_text = f"Orçamento estourado em R$ {utils.formatar_moeda_brl(abs(row['Restante']))}"
+            elif progresso >= 0.8:
+                status_color_method = st.warning
+                status_text = f"Atenção: próximo do limite. Restam R$ {utils.formatar_moeda_brl(row['Restante'])}"
             else:
-                st.write(f"Gasto: {gasto_fmt} de {orcamento_fmt}")
+                status_color_method = st.success
+                status_text = f"Dentro do orçamento. Restam R$ {utils.formatar_moeda_brl(row['Restante'])}"
+
+            # Exibe as métricas em colunas
+            col1, col2 = st.columns(2)
+            col1.metric("Gasto Atual", f"R$ {utils.formatar_moeda_brl(row['Total'])}")
+            col2.metric("Orçamento Total", f"R$ {utils.formatar_moeda_brl(row['Orçamento'])}")
+
+            # Barra de progresso visual
+            st.progress(min(progresso, 1.0))
             
-            # A barra de progresso fica vermelha se passar de 100%
-            st.progress(min(row['Progresso'], 1.0))
+            # Exibe o texto de status com a cor apropriada
+            status_color_method(status_text)
+            
+            st.markdown("---") # Separador para a próxima categoria
