@@ -691,6 +691,22 @@ def get_fatura_cartao(user_id, conta_id, mes, ano):
     return _execute_query(query, (user_id, conta_id, mes_ano_str), fetch='all')
 
 @st.cache_data
+def get_historico_faturas(user_id, conta_id):
+    """
+    Busca o valor total de faturas de um cartão de crédito específico ao longo do tempo.
+    """
+    query = """
+        SELECT
+            TO_CHAR(data_vencimento, 'YYYY-MM') as mes_fatura,
+            SUM(valor) as total_fatura
+        FROM despesas
+        WHERE user_id = %s AND conta_id = %s AND tipo_pagamento = 'Crédito'
+        GROUP BY mes_fatura
+        ORDER BY mes_fatura ASC
+    """
+    return _execute_query(query, (user_id, conta_id), fetch='all')
+
+@st.cache_data
 def get_transacoes_consolidadas(user_id, conta_id=None):
     """
     Busca e consolida todas as transações, com um filtro opcional por conta.

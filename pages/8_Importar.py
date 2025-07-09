@@ -19,7 +19,7 @@ def gerar_template_csv_despesas():
         'valor_total': ['25.50'],
         'conta': ['Carteira'],
         'categoria': ['Alimentação'],
-        'tipo_pagamento': ['débito'],
+        'tipo_pagamento': ['Débito'],
         'parcelas': [1]
     }
     df_template = pd.DataFrame(template_data)
@@ -141,8 +141,8 @@ def processar_importacao_despesas(df, user_id, contas):
 
             categoria_nome = str(row['categoria'])
             tipo_pagamento = str(row['tipo_pagamento']).lower()
-            if tipo_pagamento not in ['crédito', 'débito']:
-                raise ValueError("O 'tipo_pagamento' deve ser 'crédito' ou 'débito'.")
+            if tipo_pagamento not in ['Crédito', 'Débito']:
+                raise ValueError("O 'tipo_pagamento' deve ser 'Crédito' ou 'Débito'.")
 
             parcelas = int(row['parcelas'])
             if parcelas < 1:
@@ -156,11 +156,11 @@ def processar_importacao_despesas(df, user_id, contas):
             valor_primeira_parcela = valor_parcela_padrao + diferenca
             grupo_id = int(datetime.datetime.now().timestamp() * 1000) + index
 
-            if tipo_pagamento == 'crédito':
+            if tipo_pagamento == 'Crédito':
                 # Busca informações da conta para cálculo de vencimento
                 conta_info_list = [c for c in contas if c[0] == conta_id]
                 if not conta_info_list:
-                     raise ValueError(f"Não foi possível encontrar detalhes da conta de crédito '{row['conta']}'.")
+                     raise ValueError(f"Não foi possível encontrar detalhes da conta de Crédito '{row['conta']}'.")
                 conta_info = conta_info_list[0]
                 primeiro_vencimento = utils._calcular_vencimento_credito(data_compra, conta_info[2], conta_info[5])
             else:
