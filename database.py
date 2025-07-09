@@ -246,10 +246,52 @@ def get_or_create_categoria_receita(user_id, nome_categoria):
     return get_or_create_categoria(user_id, nome_categoria, 'receita')
 
 # -------- Receitas --------
-def insert_receita(user_id, conta_id, data, valor, categoria, descricao):
-    query = "INSERT INTO receitas (user_id, conta_id, data, valor, categoria, descricao) VALUES (%s, %s, %s, %s, %s, %s)"
-    params = (user_id, conta_id, data, float(valor), categoria, descricao)
-    _execute_query(query, params, commit=True)
+
+# Dicionário para calcular o delta da recorrência
+RECORRENCIA_MAP = {
+    "Diária": relativedelta(days=1),
+    "Semanal": relativedelta(weeks=1),
+    "Mensal": relativedelta(months=1),
+    "Bimestral": relativedelta(months=2),
+    "Trimestral": relativedelta(months=3),
+    "Semestral": relativedelta(months=6),
+    "Anual": relativedelta(years=1),
+}
+
+def insert_receita(user_id, conta_id, data_str, valor, categoria, descricao, recorrencia_freq=None, recorrencia_vezes=1):
+    valor_float = float(valor)
+    data_obj = datetime.datetime.strptime(data_str, "%Y-%m-%d").date()
+    grupo_id = int(time.time() * 1000)
+
+    dados_para_inserir = []
+
+    if recorrencia_freq and recorrencia_vezes > 1:
+        delta = RECORRENCIA_MAP.get(recorrencia_freq)
+        if not delta:
+            raise ValueError("Frequência de recorrência inválida.")
+        
+        for i in range(recorrencia_vezes):
+            data_lancamento = data_obj + (delta * i)
+            descricao_recorrencia = f"{descricao} ({i+1}/{recorrencia_vezes})"
+            dados_para_inserir.append((
+                user_id, conta_id, data_lancamento.isoformat(), valor_float,
+                categoria, descricao_recorrencia, recorrencia_freq, grupo_id
+            ))
+    else:
+        # Lançamento único
+        dados_para_inserir.append((
+            user_id, conta_id, data_str, valor_float,
+            categoria, descricao, None, None
+        ))
+        
+    # Executa a inserção em lote
+    if dados_para_inserir:
+        _execute_query(
+            "INSERT INTO receitas (user_id, conta_id, data, valor, categoria, descricao, recorrencia, recorrencia_grupo_id) VALUES %s",
+            executemany_params=dados_para_inserir,
+            commit=True
+        )
+
     st.cache_data.clear()
 
 @st.cache_data
@@ -267,38 +309,69 @@ def delete_receita(receita_id, user_id):
     st.cache_data.clear()
 
 # -------- Despesas --------
-def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pagamento, parcelas, descricao):
-    # ... (lógica de cálculo de parcelas e vencimentos permanece a mesma) ...
+def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pagamento, parcelas, descricao, recorrencia_freq=None, recorrencia_vezes=1):
+    
     valor_total = float(valor)
     data_compra_obj = datetime.datetime.strptime(data_compra_str, "%Y-%m-%d").date()
-    valor_parcela_padrao = round(valor_total / parcelas, 2)
-    diferenca = round(valor_total - (valor_parcela_padrao * parcelas), 2)
-    valor_primeira_parcela = valor_parcela_padrao + diferenca
-    grupo_id = int(datetime.datetime.now().timestamp() * 1000)
+    # Gera um ID único para o grupo de transações (seja parcela ou recorrência)
+    grupo_id = int(time.time() * 1000)
     
-    conn = _get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            if tipo_pagamento == 'crédito':
-                cur.execute("SELECT vencimento, fechamento FROM contas WHERE conta_id = %s AND user_id = %s", (conta_id, user_id))
-                conta_info = cur.fetchone()
-                if not conta_info: raise ValueError("Conta de crédito não encontrada.")
-                dia_vencimento, dias_fechamento = conta_info
-                primeiro_vencimento = _calcular_vencimento_credito(data_compra_obj, dia_vencimento, dias_fechamento)
-            else:
-                primeiro_vencimento = data_compra_obj
+    dados_para_inserir = []
 
-            dados_para_inserir = []
-            for i in range(parcelas):
-                valor_a_inserir = valor_primeira_parcela if i == 0 else valor_parcela_padrao
-                vencimento_parcela = primeiro_vencimento + relativedelta(months=i)
-                descricao_parcela = f"{descricao} ({i+1}/{parcelas})" if parcelas > 1 else descricao
-                dados_para_inserir.append((user_id, conta_id, data_compra_str, vencimento_parcela.isoformat(), valor_a_inserir, categoria, tipo_pagamento, i + 1, descricao_parcela, grupo_id))
+    # --- LÓGICA DE RECORRÊNCIA ---
+    if recorrencia_freq and recorrencia_vezes > 1:
+        delta = RECORRENCIA_MAP.get(recorrencia_freq)
+        if not delta:
+            raise ValueError("Frequência de recorrência inválida.")
+        
+        for i in range(recorrencia_vezes):
+            data_lancamento = data_compra_obj + (delta * i)
+            descricao_recorrencia = f"{descricao} ({i+1}/{recorrencia_vezes})"
+            # Para recorrências, a data de compra e vencimento são as mesmas
+            dados_para_inserir.append((
+                user_id, conta_id, data_lancamento.isoformat(), data_lancamento.isoformat(),
+                valor_total, categoria, tipo_pagamento, 1, # Parcela é sempre 1 para recorrência
+                descricao_recorrencia, recorrencia_freq, grupo_id
+            ))
             
-            psycopg2.extras.execute_values(cur, "INSERT INTO despesas (user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao, parcela_grupo_id) VALUES %s", dados_para_inserir)
-        conn.commit()
-    finally:
-        conn.close()
+    # --- LÓGICA DE PARCELAMENTO (para cartão de crédito) ---
+    else:
+        # A lógica original de parcelamento permanece, mas agora dentro deste 'else'
+        valor_parcela_padrao = round(valor_total / parcelas, 2)
+        diferenca = round(valor_total - (valor_parcela_padrao * parcelas), 2)
+        valor_primeira_parcela = valor_parcela_padrao + diferenca
+        
+        conn = _get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                primeiro_vencimento = data_compra_obj
+                if tipo_pagamento == 'crédito':
+                    cur.execute("SELECT vencimento, fechamento FROM contas WHERE conta_id = %s AND user_id = %s", (conta_id, user_id))
+                    conta_info = cur.fetchone()
+                    if not conta_info: raise ValueError("Conta de crédito não encontrada.")
+                    dia_vencimento, dias_fechamento = conta_info
+                    primeiro_vencimento = _calcular_vencimento_credito(data_compra_obj, dia_vencimento, dias_fechamento)
+
+                for i in range(parcelas):
+                    valor_a_inserir = valor_primeira_parcela if i == 0 else valor_parcela_padrao
+                    vencimento_parcela = primeiro_vencimento + relativedelta(months=i)
+                    descricao_parcela = f"{descricao} ({i+1}/{parcelas})" if parcelas > 1 else descricao
+                    dados_para_inserir.append((
+                        user_id, conta_id, data_compra_str, vencimento_parcela.isoformat(),
+                        valor_a_inserir, categoria, tipo_pagamento, i + 1,
+                        descricao_parcela, None, # Sem frequência de recorrência
+                        grupo_id if parcelas > 1 else None
+                    ))
+        finally:
+            conn.close()
+
+    # Executa a inserção em lote
+    if dados_para_inserir:
+        _execute_query(
+            "INSERT INTO despesas (user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao, recorrencia, parcela_grupo_id) VALUES %s",
+            executemany_params=dados_para_inserir,
+            commit=True
+        )
     st.cache_data.clear()
 
 @st.cache_data

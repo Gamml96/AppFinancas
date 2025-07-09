@@ -21,19 +21,37 @@ categorias_list = [cat[1] for cat in categorias_despesa]
 with st.form("form_nova_despesa"):
     st.markdown("### Adicionar Nova Despesa")
     descricao = st.text_input("Descrição da Despesa")
-    valor = st.number_input("Valor Total", min_value=0.01, format="%.2f")
-    data_compra = st.date_input("Data da Compra", value=utils.get_local_today())
+    valor = st.number_input("Valor (de cada ocorrência)", min_value=0.01, format="%.2f")
+    data_compra = st.date_input("Data da Primeira Ocorrência", value=utils.get_local_today())
     categoria = st.selectbox("Categoria", options=categorias_list)
     conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()))
-    tipo_pagamento = st.radio("Tipo de Pagamento", ["crédito", "débito"], horizontal=True)
-    parcelas = st.number_input("Nº de Parcelas", min_value=1, step=1)
+
+    st.markdown("---")
+    st.markdown("#### Detalhes de Pagamento e Repetição")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        tipo_pagamento = st.radio("Tipo de Pagamento", ["crédito", "débito"], horizontal=True)
+        parcelas = st.number_input("Nº de Parcelas (Cartão)", min_value=1, step=1, help="Use apenas para compras no cartão de crédito divididas em parcelas. Para assinaturas mensais, use a Recorrência.")
+    
+    with col2:
+        recorrencia_freq = st.selectbox("Frequência da Recorrência", ["Única", "Diária", "Semanal", "Mensal", "Bimestral", "Trimestral", "Semestral", "Anual"])
+        recorrencia_vezes = st.number_input("Repetir por (vezes)", min_value=1, step=1, help="Quantas vezes este lançamento deve se repetir. Deixe 1 para um lançamento único.")
 
     if st.form_submit_button("Adicionar Despesa"):
         if not descricao.strip():
             st.toast("A descrição é obrigatória.", icon="⚠️")
+        elif tipo_pagamento == 'crédito' and recorrencia_freq != 'Única':
+            st.error("Lançamentos recorrentes não podem ser do tipo 'crédito'. Use 'débito' para assinaturas e recorrências.")
         else:
-            database.insert_despesa(user_id, contas_dict[conta_nome], data_compra.isoformat(), valor, categoria, tipo_pagamento, parcelas, descricao.strip())
-            st.toast(f"Despesa '{descricao}' adicionada!", icon="✅"); st.rerun()
+            # Passamos os novos parâmetros para a função de inserção
+            database.insert_despesa(
+                user_id, contas_dict[conta_nome], data_compra.isoformat(), 
+                valor, categoria, tipo_pagamento, parcelas, descricao.strip(),
+                recorrencia_freq if recorrencia_freq != 'Única' else None, # Envia a frequência ou None
+                recorrencia_vezes
+            )
+            st.toast(f"Despesa '{descricao}' adicionada com sucesso!", icon="✅"); st.rerun()
 
 st.markdown("---")
 despesas = database.get_despesas(user_id)

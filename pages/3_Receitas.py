@@ -21,17 +21,28 @@ categorias_list = [cat[1] for cat in categorias_receita]
 with st.form("form_nova_receita"):
     st.markdown("### Adicionar Nova Receita")
     descricao = st.text_input("Descrição")
-    valor = st.number_input("Valor", min_value=0.01, format="%.2f")
-    data = st.date_input("Data", value=utils.get_local_today())
+    valor = st.number_input("Valor (de cada ocorrência)", min_value=0.01, format="%.2f")
+    data = st.date_input("Data da Primeira Ocorrência", value=utils.get_local_today())
     conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()))
     categoria_nome = st.selectbox("Categoria", options=categorias_list)
+
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        recorrencia_freq = st.selectbox("Frequência da Recorrência", ["Única", "Diária", "Semanal", "Mensal", "Bimestral", "Trimestral", "Semestral", "Anual"])
+    with col2:
+        recorrencia_vezes = st.number_input("Repetir por (vezes)", min_value=1, step=1)
     
     if st.form_submit_button("Adicionar Receita"):
         if not descricao.strip():
             st.toast("Descrição é obrigatória.", icon="⚠️")
         else:
             conta_id = contas_dict[conta_nome]
-            database.insert_receita(user_id, conta_id, data.isoformat(), valor, categoria_nome, descricao.strip())
+            database.insert_receita(
+                user_id, conta_id, data.isoformat(), valor, categoria_nome, descricao.strip(),
+                recorrencia_freq if recorrencia_freq != 'Única' else None,
+                recorrencia_vezes
+            )
             st.toast("Receita adicionada com sucesso!", icon="✅")
             st.rerun()
 
