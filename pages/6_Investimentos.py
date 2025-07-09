@@ -40,7 +40,7 @@ profile, user_id, username = utils.check_authentication()
 st.title("Meus Investimentos")
 
 # --- Criação das Abas ---
-tab_portfolio, tab_gerenciar = st.tabs(["Meu Portfólio", "Gerenciar Transações"])
+tab_portfolio, tab_transacoes, tab_ativos = st.tabs(["Meu Portfólio", "Transações", "Ativos"])
 
 # --- ABA 1: MEU PORTFÓLIO (VISUALIZAÇÃO) ---
 with tab_portfolio:
@@ -139,7 +139,7 @@ with tab_portfolio:
         st.dataframe(styled_df, use_container_width=True,hide_index=True)
 
 # --- ABA 2: GERENCIAR TRANSAÇÕES (EDIÇÃO E CADASTRO) ---
-with tab_gerenciar:
+with tab_transacoes:
     st.markdown("### Registrar Nova Transação")
     investimentos_usuario = database.get_investimentos_usuario(user_id)
     
@@ -166,7 +166,7 @@ with tab_gerenciar:
                 else:
                     st.warning("Preencha todos os campos corretamente.")
 
-    # --- INÍCIO DA CORREÇÃO ---
+
     with st.expander("Não encontrou seu ativo? Cadastre um novo aqui"):
         with st.form("form_novo_ativo"):
             st.markdown("#### Detalhes do Novo Ativo")
@@ -209,6 +209,65 @@ with tab_gerenciar:
                         st.error(f"Erro ao cadastrar ativo: {e}")
                 else:
                     st.warning("Preencha pelo menos o Código e o Tipo de Investimento.")
+# --- ABA 3: ATIVOS (CRIAÇÃO E GERENCIAMENTO) ---
+with tab_ativos:
+    st.markdown("### Cadastrar Novo Ativo")
+    with st.form("form_novo_ativo"):
+        # ... (O formulário para cadastrar um novo ativo foi movido para cá e não muda) ...
+        # Cole aqui o código completo do seu formulário de cadastro de novo ativo
+        # ...
+
+    st.markdown("---")
+    st.markdown("### Ativos Cadastrados")
+    
+    todos_ativos = database.get_all_ativos_usuario(user_id)
+    if not todos_ativos:
+        st.info("Nenhum ativo cadastrado. Use o formulário acima para começar.")
+    else:
+        df_ativos = pd.DataFrame(todos_ativos, columns=["ID", "Código", "Descrição", "Tipo", "Indexador", "Taxa %", "Vencimento"])
+        df_ativos["Excluir"] = False
+
+        edited_df = st.data_editor(
+            df_ativos,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "ID": None, # Oculta a coluna ID
+                "Código": st.column_config.TextColumn("Código", disabled=True),
+                "Tipo": st.column_config.TextColumn("Tipo", disabled=True),
+                "Descrição": st.column_config.TextColumn("Descrição", required=True),
+                "Indexador": st.column_config.SelectboxColumn("Indexador", options=["CDI", "IPCA", "Prefixado"]),
+                "Taxa %": st.column_config.NumberColumn("Taxa %", format="%.2f"),
+                "Vencimento": st.column_config.DateColumn("Vencimento"),
+                "Excluir": st.column_config.CheckboxColumn("Excluir?", default=False)
+            },
+            key="editor_ativos"
+        )
+
+        col_save, col_delete = st.columns(2)
+        if col_save.button("Salvar Alterações nos Ativos"):
+            if "editor_ativos" in st.session_state:
+                dados_para_salvar = st.session_state["editor_ativos"]
+                df_para_salvar = pd.DataFrame(dados_para_salvar)
+                
+                for _, row in df_para_salvar.iterrows():
+                    database.update_ativo(
+                        int(row["ID"]), user_id, row["Descrição"], row["Indexador"], 
+                        float(row["Taxa %"]) if row["Taxa %"] else None, 
+                        row["Vencimento"]
+                    )
+                st.success("Alterações nos ativos salvas com sucesso!")
+                st.rerun()
+
+        if col_delete.button("Excluir Ativos Selecionados", type="primary"):
+            selected_to_delete = edited_df[edited_df["Excluir"]]
+            if not selected_to_delete.empty:
+                for _, row in selected_to_delete.iterrows():
+                    database.delete_ativo(int(row["ID"]), user_id)
+                st.success(f"{len(selected_to_delete)} ativo(s) excluído(s)!")
+                st.rerun()
+            else:
+                st.info("Nenhum ativo selecionado para exclusão.")
 
     st.markdown("---")
     st.markdown("### Histórico de Transações")

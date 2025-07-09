@@ -443,6 +443,38 @@ def get_transacoes_por_investimento_id(investimento_id):
     query = "SELECT data, quantidade, preco_unitario FROM transacoes_investimento WHERE investimento_id = %s AND tipo_transacao = 'compra' ORDER BY data"
     return _execute_query(query, (investimento_id,), fetch='all')
     
+@st.cache_data
+def get_all_ativos_usuario(user_id):
+    """Busca TODOS os ativos cadastrados por um usuário, com todos os detalhes."""
+    query = """
+        SELECT i.investimento_id, i.codigo, i.descricao, ti.nome as tipo, 
+               i.indexador, i.taxa_percentual, i.data_vencimento
+        FROM investimentos i
+        JOIN tipos_investimento ti ON i.tipo_id = ti.tipo_id
+        WHERE i.user_id = %s
+        ORDER BY i.codigo
+    """
+    return _execute_query(query, (user_id,), fetch='all')
+
+def update_ativo(investimento_id, user_id, descricao, indexador, taxa_percentual, data_vencimento):
+    """Atualiza os detalhes de um ativo específico."""
+    data_vencimento_str = data_vencimento.isoformat() if data_vencimento else None
+    query = """
+        UPDATE investimentos 
+        SET descricao = %s, indexador = %s, taxa_percentual = %s, data_vencimento = %s
+        WHERE investimento_id = %s AND user_id = %s
+    """
+    params = (descricao, indexador, taxa_percentual, data_vencimento_str, investimento_id, user_id)
+    _execute_query(query, params)
+    st.cache_data.clear()
+
+def delete_ativo(investimento_id, user_id):
+    """Exclui um ativo e todas as suas transações associadas (graças ao ON DELETE CASCADE)."""
+    query = "DELETE FROM investimentos WHERE investimento_id = %s AND user_id = %s"
+    _execute_query(query, (investimento_id, user_id))
+    st.cache_data.clear()
+
+
 # --- Orçamento ---
 
 @st.cache_data
