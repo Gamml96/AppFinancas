@@ -190,7 +190,7 @@ with tab_gerenciar:
                 with col_c:
                     indexador = st.selectbox("Indexador", ["CDI", "IPCA", "Prefixado"])
                 with col_d:
-                    taxa_percentual = st.number_input(f"Taxa/Percentual do {indexador}", min_value=0.0, format="%.2f")
+                    taxa_percentual = st.number_input(f"Taxa % do {indexador}", min_value=0.0, format="%.2f")
                 with col_e:
                     data_vencimento = st.date_input("Data de Vencimento", value=utils.get_local_today() + relativedelta(years=2))
 
