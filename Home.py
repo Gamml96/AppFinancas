@@ -21,7 +21,6 @@ def main():
     if not st.session_state.get("authentication_status"):
         st.markdown(hide_sidebar_nav_css, unsafe_allow_html=True)
 
-    def main():
     # 1. Configuração da página (com o ícone)
     st.set_page_config(
         page_title="App Finanças",
