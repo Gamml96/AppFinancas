@@ -311,60 +311,81 @@ def delete_receita(receita_id, user_id):
 
 # -------- Despesas --------
 def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pagamento, parcelas, descricao, recorrencia_freq=None, recorrencia_vezes=1):
-    
+    """
+    Insere uma ou mais despesas, lidando com parcelas, recorrências (débito e crédito) ou lançamentos únicos.
+    """
     valor_total = float(valor)
     data_compra_obj = datetime.datetime.strptime(data_compra_str, "%Y-%m-%d").date()
-    # Gera um ID único para o grupo de transações (seja parcela ou recorrência)
     grupo_id = int(time.time() * 1000)
     
     dados_para_inserir = []
 
-    # --- LÓGICA DE RECORRÊNCIA ---
-    if recorrencia_freq and recorrencia_vezes > 1:
+    # --- LÓGICA PRINCIPAL: RECORRÊNCIA ---
+    if recorrencia_freq and recorrencia_vezes > 0:
         delta = RECORRENCIA_MAP.get(recorrencia_freq)
-        if not delta:
-            raise ValueError("Frequência de recorrência inválida.")
+        if not delta: raise ValueError("Frequência de recorrência inválida.")
         
+        # Se for crédito, precisamos dos detalhes do cartão para calcular os vencimentos
+        dia_vencimento, dias_fechamento = None, None
+        if tipo_pagamento == 'crédito':
+            contas = get_contas(user_id)
+            conta_info_list = [c for c in contas if c[0] == conta_id]
+            if not conta_info_list: raise ValueError("Conta de crédito não encontrada.")
+            conta_info = conta_info_list[0]
+            dia_vencimento, dias_fechamento = conta_info[2], conta_info[5]
+
         for i in range(recorrencia_vezes):
+            # Calcula a data da "compra" para cada ocorrência futura
             data_lancamento = data_compra_obj + (delta * i)
-            descricao_recorrencia = f"{descricao} ({i+1}/{recorrencia_vezes})"
-            # Para recorrências, a data de compra e vencimento são as mesmas
+            
+            # Determina a data de vencimento
+            vencimento_final = data_lancamento  # Padrão para débito
+            if tipo_pagamento == 'crédito':
+                # NOVO: Calcula o vencimento da fatura para CADA ocorrência
+                vencimento_final = _calcular_vencimento_credito(data_lancamento, dia_vencimento, dias_fechamento)
+
+            desc_recorrencia = f"{descricao} ({i+1}/{recorrencia_vezes})" if recorrencia_vezes > 1 else descricao
+            
             dados_para_inserir.append((
-                user_id, conta_id, data_lancamento.isoformat(), data_lancamento.isoformat(),
+                user_id, conta_id, data_lancamento.isoformat(), vencimento_final.isoformat(),
                 valor_total, categoria, tipo_pagamento, 1, # Parcela é sempre 1 para recorrência
-                descricao_recorrencia, recorrencia_freq, grupo_id
+                desc_recorrencia, recorrencia_freq, grupo_id
             ))
             
-    # --- LÓGICA DE PARCELAMENTO (para cartão de crédito) ---
+    # --- LÓGICA SECUNDÁRIA: PARCELAMENTO (ou lançamento único) ---
     else:
-        # A lógica original de parcelamento permanece, mas agora dentro deste 'else'
+        # Esta parte lida com compras parceladas no cartão ou lançamentos únicos no débito
         valor_parcela_padrao = round(valor_total / parcelas, 2)
         diferenca = round(valor_total - (valor_parcela_padrao * parcelas), 2)
         valor_primeira_parcela = valor_parcela_padrao + diferenca
         
-        conn = _get_db_connection()
-        try:
-            with conn.cursor() as cur:
-                primeiro_vencimento = data_compra_obj
-                if tipo_pagamento == 'crédito':
-                    cur.execute("SELECT vencimento, fechamento FROM contas WHERE conta_id = %s AND user_id = %s", (conta_id, user_id))
-                    conta_info = cur.fetchone()
-                    if not conta_info: raise ValueError("Conta de crédito não encontrada.")
-                    dia_vencimento, dias_fechamento = conta_info
-                    primeiro_vencimento = _calcular_vencimento_credito(data_compra_obj, dia_vencimento, dias_fechamento)
+        primeiro_vencimento = data_compra_obj
+        if tipo_pagamento == 'crédito':
+            contas = get_contas(user_id)
+            conta_info_list = [c for c in contas if c[0] == conta_id]
+            if not conta_info_list: raise ValueError("Conta de crédito não encontrada.")
+            conta_info = conta_info_list[0]
+            dia_vencimento, dias_fechamento = conta_info[2], conta_info[5]
+            primeiro_vencimento = _calcular_vencimento_credito(data_compra_obj, dia_vencimento, dias_fechamento)
 
-                for i in range(parcelas):
-                    valor_a_inserir = valor_primeira_parcela if i == 0 else valor_parcela_padrao
-                    vencimento_parcela = primeiro_vencimento + relativedelta(months=i)
-                    descricao_parcela = f"{descricao} ({i+1}/{parcelas})" if parcelas > 1 else descricao
-                    dados_para_inserir.append((
-                        user_id, conta_id, data_compra_str, vencimento_parcela.isoformat(),
-                        valor_a_inserir, categoria, tipo_pagamento, i + 1,
-                        descricao_parcela, None, # Sem frequência de recorrência
-                        grupo_id if parcelas > 1 else None
-                    ))
-        finally:
-            conn.close()
+        for i in range(parcelas):
+            valor_a_inserir = valor_primeira_parcela if i == 0 else valor_parcela_padrao
+            vencimento_parcela = primeiro_vencimento + relativedelta(months=i)
+            desc_parcela = f"{descricao} ({i+1}/{parcelas})" if parcelas > 1 else descricao
+            dados_para_inserir.append((
+                user_id, conta_id, data_compra_str, vencimento_parcela.isoformat(),
+                valor_a_inserir, categoria, tipo_pagamento, i + 1,
+                desc_parcela, None, grupo_id if parcelas > 1 else None
+            ))
+
+    # Executa a inserção em lote no banco de dados
+    if dados_para_inserir:
+        _execute_query(
+            "INSERT INTO despesas (user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao, recorrencia, parcela_grupo_id) VALUES %s",
+            executemany_params=dados_para_inserir,
+            commit=True
+        )
+    st.cache_data.clear()
 
     # Executa a inserção em lote
     if dados_para_inserir:

@@ -41,14 +41,12 @@ with st.form("form_nova_despesa"):
     if st.form_submit_button("Adicionar Despesa"):
         if not descricao.strip():
             st.toast("A descrição é obrigatória.", icon="⚠️")
-        elif tipo_pagamento == 'crédito' and recorrencia_freq != 'Única':
-            st.error("Lançamentos recorrentes não podem ser do tipo 'crédito'. Use 'débito' para assinaturas e recorrências.")
         else:
-            # Passamos os novos parâmetros para a função de inserção
+            # A chamada da função permanece a mesma
             database.insert_despesa(
                 user_id, contas_dict[conta_nome], data_compra.isoformat(), 
                 valor, categoria, tipo_pagamento, parcelas, descricao.strip(),
-                recorrencia_freq if recorrencia_freq != 'Única' else None, # Envia a frequência ou None
+                recorrencia_freq if recorrencia_freq != 'Única' else None,
                 recorrencia_vezes
             )
             st.toast(f"Despesa '{descricao}' adicionada com sucesso!", icon="✅"); st.rerun()
