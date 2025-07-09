@@ -13,7 +13,7 @@ def render_home_page(user_id):
 
     # --- INÍCIO DA NOVA SEÇÃO: BOTÕES DE ACESSO RÁPIDO ---
     st.markdown("### Acesso Rápido")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(2)
 
     # Botão para Adicionar Receita
     with col1:
@@ -69,7 +69,37 @@ def render_home_page(user_id):
                             st.rerun()
                         else:
                             st.warning("Preencha todos os campos.")
-                            
+    with col3:
+        with st.popover("🔄 Transferir Entre Contas", use_container_width=True):
+            st.markdown("#### Nova Transferência")
+            contas = database.get_contas(user_id)
+            
+            if len(contas) < 2:
+                st.warning("Você precisa de pelo menos duas contas para fazer uma transferência.")
+            else:
+                contas_dict = {conta[1]: conta[0] for conta in contas}
+                lista_nomes_contas = list(contas_dict.keys())
+                
+                with st.form("form_popover_transferencia"):
+                    conta_origem_nome = st.selectbox("Conta de Origem", options=lista_nomes_contas, key="pop_transf_origem")
+                    conta_destino_nome = st.selectbox("Conta de Destino", options=lista_nomes_contas, index=1, key="pop_transf_destino")
+                    valor = st.number_input("Valor", min_value=0.01, format="%.2f", key="pop_transf_valor")
+                    data = st.date_input("Data da Transferência", value=utils.get_local_today(), key="pop_transf_data")
+
+                    if st.form_submit_button("Confirmar Transferência"):
+                        if conta_origem_nome == conta_destino_nome:
+                            st.error("As contas de origem e destino devem ser diferentes.")
+                        elif valor <= 0:
+                            st.error("O valor deve ser maior que zero.")
+                        else:
+                            try:
+                                conta_origem_id = contas_dict[conta_origem_nome]
+                                conta_destino_id = contas_dict[conta_destino_nome]
+                                database.realizar_transferencia(user_id, conta_origem_id, conta_destino_id, valor, data)
+                                st.toast("Transferência realizada com sucesso!", icon="✅")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro: {e}")                        
     st.markdown("---")
     # --- FIM DA NOVA SEÇÃO ---
 

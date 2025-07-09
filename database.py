@@ -333,6 +333,57 @@ def delete_despesa(despesa_id, user_id):
     _execute_query("DELETE FROM despesas WHERE despesa_id = %s AND user_id = %s", (despesa_id, user_id), commit=True)
     st.cache_data.clear()
 
+def realizar_transferencia(user_id, conta_origem_id, conta_destino_id, valor, data):
+    """
+    Registra uma transferência entre contas como uma despesa na origem
+    e uma receita no destino. Usa uma única transação para garantir a atomicidade.
+    """
+    if conta_origem_id == conta_destino_id:
+        raise ValueError("A conta de origem e destino não podem ser a mesma.")
+    
+    valor_float = float(valor)
+    data_iso = data.isoformat()
+    
+    # Descrições e categoria padrão para identificar as transações de transferência
+    descricao_despesa = f"Transferência enviada"
+    descricao_receita = f"Transferência recebida"
+    categoria_transferencia = "Transferência"
+    
+    conn = _get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # Garante que a categoria "Transferência" exista
+            # Usando a função que já existe para buscar ou criar
+            get_or_create_categoria(user_id, categoria_transferencia, 'despesa')
+            get_or_create_categoria(user_id, categoria_transferencia, 'receita')
+
+            # 1. Registra a saída (despesa) na conta de origem
+            cur.execute(
+                """
+                INSERT INTO despesas (user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao)
+                VALUES (%s, %s, %s, %s, %s, %s, 'débito', 1, %s)
+                """,
+                (user_id, conta_origem_id, data_iso, data_iso, valor_float, categoria_transferencia, descricao_despesa)
+            )
+            
+            # 2. Registra a entrada (receita) na conta de destino
+            cur.execute(
+                """
+                INSERT INTO receitas (user_id, conta_id, data, valor, categoria, descricao)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (user_id, conta_destino_id, data_iso, valor_float, categoria_transferencia, descricao_receita)
+            )
+            
+            conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+            
+    st.cache_data.clear()
+
 # -------- Investimentos --------
 @st.cache_data
 def get_tipos_investimento():
