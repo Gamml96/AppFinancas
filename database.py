@@ -350,22 +350,37 @@ def add_investimento(user_id, tipo_id, codigo, descricao, indexador=None, taxa_p
     _execute_query(query, params)
     st.cache_data.clear()
 
-def get_or_create_investimento(user_id, codigo, tipo_nome, descricao=""):
+def get_or_create_investimento(user_id, codigo, tipo_nome, descricao="", indexador=None, taxa_percentual=None, data_vencimento=None):
+    """
+    Verifica se um ativo existe. Se não, cria um novo com todos os detalhes.
+    Retorna o ID do investimento.
+    """
     codigo_upper = codigo.strip().upper()
+    if not codigo_upper:
+        raise ValueError("O código do ativo não pode ser vazio.")
+
     conn = _get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT investimento_id FROM investimentos WHERE user_id = %s AND codigo = %s", (user_id, codigo_upper))
             result = cur.fetchone()
+            
             if result:
-                return result[0]
+                return result[0] # Retorna o ID do ativo existente
             else:
                 cur.execute("SELECT tipo_id FROM tipos_investimento WHERE lower(nome) = %s", (tipo_nome.lower(),))
                 tipo_result = cur.fetchone()
                 if not tipo_result:
                     raise ValueError(f"O tipo de ativo '{tipo_nome}' não é válido.")
                 tipo_id = tipo_result[0]
-                cur.execute("INSERT INTO investimentos (user_id, tipo_id, codigo, descricao) VALUES (%s, %s, %s, %s) RETURNING investimento_id", (user_id, tipo_id, codigo_upper, descricao.strip()))
+
+                # Query de inserção atualizada para incluir os novos campos
+                query = """
+                    INSERT INTO investimentos (user_id, tipo_id, codigo, descricao, indexador, taxa_percentual, data_vencimento)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING investimento_id
+                """
+                params = (user_id, tipo_id, codigo_upper, descricao.strip(), indexador, taxa_percentual, data_vencimento)
+                cur.execute(query, params)
                 new_id = cur.fetchone()[0]
                 conn.commit()
                 st.cache_data.clear()

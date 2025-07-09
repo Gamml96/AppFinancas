@@ -67,14 +67,18 @@ def gerar_template_csv_receitas():
 
 @st.cache_data
 def gerar_template_csv_investimentos():
-    """Cria um DataFrame de exemplo para transações de investimento, agora com tipo_ativo."""
+    """Cria um DataFrame de exemplo para transações de investimento, agora com colunas de Renda Fixa."""
     template_data = {
-        'data': ['2025-01-15', '2025-02-20', '2025-03-10', '2025-04-05'],
-        'codigo_ativo': ['PETR4', 'BTC-USD', 'AAPL', 'MXRF11'],
-        'tipo_transacao': ['compra', 'venda', 'venda', 'compra'],
-        'quantidade': [100, 1.1,200,100],
-        'preco_unitario': [35.50, 350000, 150, 10],
-        'tipo_ativo': ['Ação BR', 'Criptomoeda', 'Ação EUA', 'FII'] 
+        'data': ['15/01/2025', '20/02/2025', '10/03/2025'],
+        'codigo_ativo': ['PETR4', 'CDB Banco Z 110%', 'MSFT'],
+        'tipo_transacao': ['compra', 'compra', 'venda'],
+        'quantidade': [100, 1, 10],
+        'preco_unitario': ['35,50', '5000,00', '410,00'],
+        'tipo_ativo': ['Ação BR', 'Renda Fixa', 'Ação EUA'],
+        'descricao': ['Petrobras PN', 'CDB Pós-fixado do Banco Z', 'Microsoft Corp'], # Opcional
+        'indexador': ['', 'CDI', ''], # Preencher apenas para Renda Fixa
+        'taxa_percentual': ['', 110, ''], # Preencher apenas para Renda Fixa
+        'data_vencimento': ['', '15/01/2028', ''] # Preencher apenas para Renda Fixa
     }
     df_template = pd.DataFrame(template_data)
     return df_template.to_csv(index=False, sep=';').encode('utf-8')
@@ -155,25 +159,52 @@ def processar_importacao_despesas(df, user_id, contas):
         with st.expander("Ver detalhes dos erros"): [st.write(erro) for erro in erros]
 
 def processar_importacao_investimentos(df, user_id):
+    """Função que itera sobre o DataFrame e insere as transações, criando ativos complexos se necessário."""
     dados_para_inserir = []
     erros = []
+
+    # Adiciona as novas colunas opcionais à validação
+    colunas_necessarias = ['data', 'codigo_ativo', 'tipo_transacao', 'quantidade', 'preco_unitario', 'tipo_ativo']
+    if not all(col in df.columns for col in colunas_necessarias):
+        st.error(f"O arquivo enviado não contém todas as colunas necessárias. Verifique o template. Colunas esperadas: {colunas_necessarias}")
+        return
+
+    progress_bar = st.progress(0, text="Iniciando importação de investimentos...")
+    total_rows = len(df)
+
     for index, row in df.iterrows():
         try:
+            # Extração dos dados obrigatórios
             codigo_ativo = str(row['codigo_ativo'])
             tipo_transacao = str(row['tipo_transacao']).lower()
             data = pd.to_datetime(row['data'], dayfirst=True).date()
-            quantidade = float(row['quantidade'])
+            quantidade = float(str(row['quantidade']).replace(",", "."))
             preco_unitario = float(str(row['preco_unitario']).replace(",", "."))
             tipo_ativo = str(row['tipo_ativo'])
+
+            # Extração dos dados opcionais (para novos ativos)
+            descricao = str(row.get('descricao', '')) # .get() evita erro se a coluna não existir
+            indexador = str(row.get('indexador', '')) if pd.notna(row.get('indexador')) else None
+            taxa_percentual = float(str(row.get('taxa_percentual')).replace(",", ".")) if pd.notna(row.get('taxa_percentual')) else None
+            data_vencimento = pd.to_datetime(row.get('data_vencimento'), dayfirst=True).date() if pd.notna(row.get('data_vencimento')) else None
+
             if tipo_transacao not in ['compra', 'venda']: raise ValueError("Tipo de transação inválido.")
-            investimento_id = database.get_or_create_investimento(user_id, codigo_ativo, tipo_ativo)
+
+            # Chama a nova função que pode receber todos os parâmetros
+            investimento_id = database.get_or_create_investimento(
+                user_id, codigo_ativo, tipo_ativo, descricao, 
+                indexador, taxa_percentual, data_vencimento
+            )
+            
             dados_para_inserir.append((investimento_id, tipo_transacao, data.isoformat(), quantidade, preco_unitario))
         except Exception as e:
-            erros.append(f"Linha {index + 2}: {row.get('codigo_ativo', 'N/A')} - Erro: {e}")
+            erros.append(f"Linha {index + 2}: Ativo '{row.get('codigo_ativo', 'N/A')}' - Erro: {e}")
+        
+        progress_bar.progress((index + 1) / total_rows, text=f"Processando transação {index + 1}/{total_rows}")
 
     if dados_para_inserir:
         database.batch_insert_transacoes_investimento(dados_para_inserir)
-        st.success(f"{len(dados_para_inserir)} transações de investimento importadas com sucesso!")
+        st.success(f"{len(dados_para_inserir)} transação(ões) de investimento importada(s) com sucesso!")
     if erros:
         st.error(f"{len(erros)} linhas não puderam ser importadas:")
         with st.expander("Ver detalhes dos erros"): [st.write(erro) for erro in erros]
