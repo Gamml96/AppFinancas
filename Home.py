@@ -71,7 +71,7 @@ def render_home_page(user_id):
                             st.warning("Preencha todos os campos.")
                             
     st.markdown("---")
-    # --- FIM DA NOVA SEÇÃO ---
+    # --- FIM DA NOVA SEÇÃO --- teste
 
     # Seção de Lançamentos Próximos
     st.markdown("### Lançamentos Próximos")
