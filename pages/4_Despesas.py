@@ -21,8 +21,8 @@ categorias_list = [cat[1] for cat in categorias_despesa]
 with st.form("form_nova_despesa"):
     st.markdown("### Adicionar Nova Despesa")
     descricao = st.text_input("Descrição da Despesa")
-    valor = st.number_input("Valor (de cada ocorrência)", min_value=0.01, format="%.2f")
-    data_compra = st.date_input("Data da Primeira Ocorrência", value=utils.get_local_today())
+    valor = st.number_input("Valor", min_value=0.01, format="%.2f", help="Para parcelas, insira o valor total da compra. Para recorrências, insira o valor de cada ocorrência.")
+    data_compra = st.date_input("Data da Primeira Ocorrência/Compra", value=utils.get_local_today())
     categoria = st.selectbox("Categoria", options=categorias_list)
     conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()))
 
@@ -31,25 +31,54 @@ with st.form("form_nova_despesa"):
     
     col1, col2 = st.columns(2)
     with col1:
-        tipo_pagamento = st.radio("Tipo de Pagamento", ["crédito", "débito"], horizontal=True)
-        parcelas = st.number_input("Nº de Parcelas (Cartão)", min_value=1, step=1, help="Use apenas para compras no cartão de crédito divididas em parcelas. Para assinaturas mensais, use a Recorrência.")
+        tipo_pagamento = st.radio("Tipo de Pagamento", ["crédito", "débito"], horizontal=True, key="tipo_pagamento")
+        # Ajustamos o help para maior clareza
+        parcelas_input = st.number_input("Nº de Parcelas (Cartão)", min_value=1, step=1, help="Para compras parceladas. Para assinaturas, use a Recorrência ao lado.")
     
     with col2:
-        recorrencia_freq = st.selectbox("Frequência da Recorrência", ["Única", "Diária", "Semanal", "Mensal", "Bimestral", "Trimestral", "Semestral", "Anual"])
-        recorrencia_vezes = st.number_input("Repetir por (vezes)", min_value=1, step=1, help="Quantas vezes este lançamento deve se repetir. Deixe 1 para um lançamento único.")
+        recorrencia_freq_input = st.selectbox("Frequência da Recorrência", ["Única", "Diária", "Semanal", "Mensal", "Bimestral", "Trimestral", "Semestral", "Anual"], key="recorrencia_freq")
+        recorrencia_vezes_input = st.number_input("Repetir por (vezes)", min_value=1, step=1, help="Deixe 1 para um lançamento único.")
 
     if st.form_submit_button("Adicionar Despesa"):
-        if not descricao.strip():
-            st.toast("A descrição é obrigatória.", icon="⚠️")
+        if not descricao.strip() or valor <= 0:
+            st.warning("Descrição é obrigatória e o valor deve ser positivo.")
         else:
-            # A chamada da função permanece a mesma
-            database.insert_despesa(
-                user_id, contas_dict[conta_nome], data_compra.isoformat(), 
-                valor, categoria, tipo_pagamento, parcelas, descricao.strip(),
-                recorrencia_freq if recorrencia_freq != 'Única' else None,
-                recorrencia_vezes
-            )
-            st.toast(f"Despesa '{descricao}' adicionada com sucesso!", icon="✅"); st.rerun()
+            # --- LÓGICA DE SANITIZAÇÃO DE ENTRADA ---
+            # Por padrão, consideramos um lançamento único.
+            parcelas_final = parcelas_input
+            recorrencia_freq_final = None
+            recorrencia_vezes_final = 1
+
+            # DECISÃO: Se o usuário escolheu uma recorrência, ela tem prioridade.
+            if recorrencia_freq_input != "Única" and recorrencia_vezes_input > 1:
+                # Estamos no modo RECORRÊNCIA
+                recorrencia_freq_final = recorrencia_freq_input
+                recorrencia_vezes_final = recorrencia_vezes_input
+                # Forçamos as parcelas para 1 para evitar conflito na lógica do backend.
+                parcelas_final = 1
+            
+            # Se não for uma recorrência, usamos o valor das parcelas.
+            # O valor de recorrencia_freq_final já é None.
+            
+            # Chamada para o banco de dados com os dados JÁ LIMPOS E VALIDADOS.
+            try:
+                database.insert_despesa(
+                    user_id=st.session_state.user_id,
+                    conta_id=contas_dict[conta_nome],
+                    data_compra_str=data_compra.isoformat(),
+                    valor=valor,
+                    categoria=categoria,
+                    tipo_pagamento=tipo_pagamento,
+                    parcelas=parcelas_final,
+                    descricao=descricao.strip(),
+                    recorrencia_freq=recorrencia_freq_final,
+                    recorrencia_vezes=recorrencia_vezes_final
+                )
+                st.toast(f"Despesa '{descricao}' adicionada com sucesso!", icon="✅")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Ocorreu um erro ao salvar a despesa: {e}")
+
 
 st.markdown("---")
 despesas = database.get_despesas(user_id)

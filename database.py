@@ -315,8 +315,7 @@ def delete_receita(receita_id, user_id):
 
 def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pagamento, parcelas, descricao, recorrencia_freq=None, recorrencia_vezes=1):
     """
-    Insere despesas com uma lógica unificada para evitar duplicação.
-    A recorrência tem prioridade total sobre o parcelamento.
+    Insere despesas assumindo que os parâmetros de recorrência e parcelas já foram validados pela interface.
     """
     valor_float = float(valor)
     data_compra_base = datetime.datetime.strptime(data_compra_str, "%Y-%m-%d").date()
@@ -324,16 +323,14 @@ def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pa
     
     dados_para_inserir = []
 
-    # --- Decisão Crítica: Determina o modo de operação ---
-    # Se for uma recorrência, ignoramos o valor de 'parcelas' e o forçamos para 1.
-    if recorrencia_freq and recorrencia_vezes > 1:
+    # Se a frequência for definida, entramos no modo de recorrência.
+    if recorrencia_freq:
         loop_count = recorrencia_vezes
         is_recorrencia_mode = True
     else:
         loop_count = parcelas
         is_recorrencia_mode = False
 
-    # --- Busca de dados do cartão (se necessário) ---
     dia_vencimento, dias_fechamento = None, None
     if tipo_pagamento == 'crédito':
         contas = get_contas(user_id)
@@ -341,63 +338,47 @@ def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pa
         if not conta_info: raise ValueError("Conta de crédito não encontrada.")
         dia_vencimento, dias_fechamento = conta_info[2], conta_info[5]
 
-    # --- Loop Único e Centralizado ---
     for i in range(loop_count):
-        data_compra_iteracao = data_compra_base
-        valor_iteracao = valor_float
-        descricao_iteracao = descricao
-
         # --- Lógica de Recorrência ---
         if is_recorrencia_mode:
             delta = RECORRENCIA_MAP[recorrencia_freq]
             data_compra_iteracao = data_compra_base + (delta * i)
+            valor_iteracao = valor_float
             descricao_iteracao = f"{descricao} ({i+1}/{loop_count})"
-            num_parcela = 1 # Para recorrências, a parcela é sempre 1
+            num_parcela = 1
+            vencimento_iteracao = _calcular_vencimento_credito(data_compra_iteracao, dia_vencimento, dias_fechamento) if tipo_pagamento == 'crédito' else data_compra_iteracao
 
         # --- Lógica de Parcelamento ---
         else:
-            # Para parcelas, a data da compra é sempre a mesma.
-            # O valor pode variar na primeira parcela.
+            data_compra_iteracao = data_compra_base
             if i == 0:
                 valor_parcela_padrao = round(valor_float / loop_count, 2)
-                diferenca = round(valor_float - (valor_parcela_padrao * loop_count), 2)
-                valor_iteracao = valor_parcela_padrao + diferenca
+                valor_iteracao = valor_parcela_padrao + round(valor_float - (valor_parcela_padrao * loop_count), 2)
             else:
                 valor_iteracao = round(valor_float / loop_count, 2)
             
             descricao_iteracao = f"{descricao} ({i+1}/{loop_count})" if loop_count > 1 else descricao
             num_parcela = i + 1
-
-        # --- Cálculo de Vencimento (unificado) ---
-        data_vencimento_iteracao = data_compra_iteracao
-        if tipo_pagamento == 'crédito':
-            # Para parcelas, o vencimento avança mensalmente a partir do primeiro vencimento.
-            if not is_recorrencia_mode:
-                 # Calcula o vencimento da primeira fatura
+            
+            if tipo_pagamento == 'crédito':
                 primeiro_vencimento = _calcular_vencimento_credito(data_compra_base, dia_vencimento, dias_fechamento)
-                # As demais parcelas caem nos meses subsequentes
-                data_vencimento_iteracao = primeiro_vencimento + relativedelta(months=i)
-            # Para recorrências, calcula o vencimento individualmente para cada "compra"
+                vencimento_iteracao = primeiro_vencimento + relativedelta(months=i)
             else:
-                data_vencimento_iteracao = _calcular_vencimento_credito(data_compra_iteracao, dia_vencimento, dias_fechamento)
+                vencimento_iteracao = data_compra_iteracao
         
-        # Monta o registro para inserção
         dados_para_inserir.append((
-            user_id, conta_id, data_compra_iteracao.isoformat(), data_vencimento_iteracao.isoformat(),
+            user_id, conta_id, data_compra_iteracao.isoformat(), vencimento_iteracao.isoformat(),
             valor_iteracao, categoria, tipo_pagamento, num_parcela,
             descricao_iteracao, recorrencia_freq if is_recorrencia_mode else None,
             grupo_id if loop_count > 1 else None
         ))
 
-    # Inserção em lote no banco
     if dados_para_inserir:
         _execute_query(
             "INSERT INTO despesas (user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao, recorrencia, parcela_grupo_id) VALUES %s",
-            executemany_params=dados_para_inserir,
-            commit=True
+            executemany_params=dados_para_inserir, commit=True
         )
     st.cache_data.clear()
-
 
     
 def get_despesas(user_id):

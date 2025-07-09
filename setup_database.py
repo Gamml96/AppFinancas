@@ -46,7 +46,9 @@ SQL_COMMANDS = [
         data DATE,
         valor REAL,
         categoria TEXT,
-        descricao TEXT
+        descricao TEXT,
+        recorrencia TEXT,      
+        recorrencia_grupo_id BIGINT
     )""",
     """
     CREATE TABLE IF NOT EXISTS despesas (
