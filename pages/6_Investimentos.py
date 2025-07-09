@@ -126,6 +126,7 @@ with tab_portfolio:
 
         # 3. Aplica o estilo e a formatação no novo DataFrame
         styled_df = df_display.style.format({
+            'Quantidade Total':'{:.2f}'
             'Preço Médio Compra': utils.formatar_moeda_brl,
             'Custo Total': utils.formatar_moeda_brl,
             'Preço Atual': utils.formatar_moeda_brl,
