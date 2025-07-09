@@ -248,47 +248,50 @@ with tab_transacoes:
 # --- ABA 3: ATIVOS (CRIAÇÃO E GERENCIAMENTO) ---
 with tab_ativos:
     st.markdown("### Cadastrar Novo Ativo")
-    with st.form("form_novo_ativo_2"):
-        st.markdown("#### Detalhes do Novo Ativo")
-        tipos_investimento = database.get_tipos_investimento()
-        tipos_dict = {tipo[1]: tipo[0] for tipo in tipos_investimento}
-        
-        col_a, col_b = st.columns(2)
-        with col_a:
-            novo_codigo = st.text_input("Código/Apelido do Ativo (ex: PETR4, CDB Banco X)")
-            novo_tipo_nome = st.selectbox("Tipo de Investimento", options=list(tipos_dict.keys()))
-            st.write(f"DEBUG: Tipo selecionado é '{novo_tipo_nome}'")
-        with col_b:
-            nova_descricao = st.text_input("Descrição (ex: Petrobras PN, CDB 105% CDI)")
+    st.markdown("#### Detalhes do Novo Ativo")
+    tipos_investimento = database.get_tipos_investimento()
+    tipos_dict = {tipo[1]: tipo[0] for tipo in tipos_investimento}
+    
+    col_a, col_b = st.columns(2)
+    with col_a:
+        # Usamos uma chave para o selectbox para ajudar o Streamlit a rastrear seu estado
+        novo_tipo_nome = st.selectbox("Tipo de Investimento", options=list(tipos_dict.keys()), key="tipo_ativo_selecionado")
+        novo_codigo = st.text_input("Código/Apelido do Ativo (ex: PETR4, CDB Banco X)")
+    with col_b:
+        nova_descricao = st.text_input("Descrição (ex: Petrobras PN, CDB 105% CDI)")
 
-        # Campos condicionais que aparecem apenas para Renda Fixa
-        indexador = None
-        taxa_percentual = None
-        data_vencimento = None
-        if novo_tipo_nome == 'Renda Fixa':
-            st.markdown("##### Detalhes da Renda Fixa")
-            col_c, col_d, col_e = st.columns(3)
-            with col_c:
-                indexador = st.selectbox("Indexador", ["CDI", "IPCA", "Prefixado"])
-            with col_d:
-                taxa_percentual = st.number_input(f"Taxa/Percentual do {indexador}", min_value=0.0, format="%.2f")
-            with col_e:
-                data_vencimento = st.date_input("Data de Vencimento", value=utils.get_local_today() + relativedelta(years=2))
+    # Campos condicionais que aparecem apenas para Renda Fixa
+    indexador = None
+    taxa_percentual = None
+    data_vencimento = None
 
-        if st.form_submit_button("Cadastrar Novo Ativo"):
-            if novo_codigo and novo_tipo_nome:
-                try:
-                    tipo_id = tipos_dict[novo_tipo_nome]
-                    database.add_investimento(
-                        user_id, tipo_id, novo_codigo, nova_descricao, 
-                        indexador, taxa_percentual, data_vencimento
-                    )
-                    st.success(f"Ativo {novo_codigo.upper()} cadastrado com sucesso!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao cadastrar ativo: {e}")
-            else:
-                st.warning("Preencha pelo menos o Código e o Tipo de Investimento.")
+    # Agora, quando você selecionar 'Renda Fixa', a página irá re-executar
+    # e esta condição será avaliada corretamente, mostrando os campos abaixo.
+    if novo_tipo_nome.strip().lower() == 'renda fixa':
+        st.markdown("##### Detalhes da Renda Fixa")
+        col_c, col_d, col_e = st.columns(3)
+        with col_c:
+            indexador = st.selectbox("Indexador", ["CDI", "IPCA", "Prefixado"])
+        with col_d:
+            taxa_percentual = st.number_input(f"Taxa/Percentual do {indexador}", min_value=0.0, format="%.2f")
+        with col_e:
+            data_vencimento = st.date_input("Data de Vencimento", value=utils.get_local_today() + relativedelta(years=2))
+
+    # Usamos um st.button normal em vez de um st.form_submit_button
+    if st.button("Cadastrar Novo Ativo"):
+        if novo_codigo and novo_tipo_nome:
+            try:
+                tipo_id = tipos_dict[novo_tipo_nome]
+                database.add_investimento(
+                    user_id, tipo_id, novo_codigo, nova_descricao, 
+                    indexador, taxa_percentual, data_vencimento
+                )
+                st.success(f"Ativo {novo_codigo.upper()} cadastrado com sucesso!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao cadastrar ativo: {e}")
+        else:
+            st.warning("Preencha pelo menos o Código e o Tipo de Investimento.")
 
     st.markdown("---")
     st.markdown("### Ativos Cadastrados")
