@@ -10,7 +10,22 @@ from dateutil.relativedelta import relativedelta
 
 def render_home_page(user_id):
     st.title("Visão Geral Financeira")
-
+    # --- INÍCIO DA SEÇÃO DE FILTROS ---
+    st.markdown("### Filtros da Visão Geral")
+    
+    # 1. Busca todas as contas para popular o filtro
+    contas = database.get_contas(user_id)
+    if not contas:
+        st.warning("Cadastre pelo menos uma conta para começar.")
+        st.stop()
+        
+    lista_contas = {conta[1]: conta[0] for conta in contas}
+    opcoes_filtro = ["Todas as Contas"] + list(lista_contas.keys())
+    
+    # 2. Cria o selectbox para o filtro de conta
+    conta_selecionada_nome = st.selectbox("Visualizar por conta:", options=opcoes_filtro)
+    # --- FIM DA SEÇÃO DE FILTROS ---
+    
     # --- INÍCIO DA NOVA SEÇÃO: BOTÕES DE ACESSO RÁPIDO ---
     st.markdown("### Acesso Rápido")
     col1, col2, col3 = st.columns(3)
@@ -132,23 +147,6 @@ def render_home_page(user_id):
             else: # tipo == 'despesa'
                 st.error(f"**{dia_str}:** {descricao.upper()} | **- {valor_formatado}**", icon="💸")
 
-    st.markdown("---")
-    # --- INÍCIO DA SEÇÃO DE FILTROS ---
-    st.markdown("### Filtros da Visão Geral")
-    
-    # 1. Busca todas as contas para popular o filtro
-    contas = database.get_contas(user_id)
-    if not contas:
-        st.warning("Cadastre pelo menos uma conta para começar.")
-        st.stop()
-        
-    lista_contas = {conta[1]: conta[0] for conta in contas}
-    opcoes_filtro = ["Todas as Contas"] + list(lista_contas.keys())
-    
-    # 2. Cria o selectbox para o filtro de conta
-    conta_selecionada_nome = st.selectbox("Visualizar por conta:", options=opcoes_filtro)
-    # --- FIM DA SEÇÃO DE FILTROS ---
-    
     st.markdown("---")
     # Seção do Fluxo de Caixa
     st.header("Fluxo de Caixa Diário")
