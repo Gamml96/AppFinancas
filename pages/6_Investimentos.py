@@ -142,53 +142,73 @@ with tab_portfolio:
 with tab_gerenciar:
     st.markdown("### Registrar Nova Transação")
     investimentos_usuario = database.get_investimentos_usuario(user_id)
-    investimentos_dict = {inv[1]: inv[0] for inv in investimentos_usuario}
+    
+    if not investimentos_usuario:
+        st.info("Você precisa cadastrar um ativo antes de registrar uma transação.")
+    else:
+        investimentos_dict = {inv[1]: inv[0] for inv in investimentos_usuario}
+        with st.form("form_transacao"):
+            col1, col2 = st.columns(2)
+            with col1:
+                ativo_codigo = st.selectbox("Ativo (Código)", options=list(investimentos_dict.keys()), help="Cadastre novos ativos no expander abaixo.")
+                tipo_transacao = st.radio("Tipo de Transação", ["compra", "venda"], horizontal=True)
+                data_transacao = st.date_input("Data da Transação", value=utils.get_local_today())
+            with col2:
+                quantidade = st.number_input("Quantidade", min_value=0.0, format="%.8f")
+                preco_unitario = st.number_input("Preço Unitário (R$)", min_value=0.0, format="%.2f")
 
-    with st.form("form_transacao"):
-        col1, col2 = st.columns(2)
-        with col1:
-            ativo_codigo = st.selectbox("Ativo (Código)", options=list(investimentos_dict.keys()), help="Cadastre novos ativos no expander abaixo.")
-            tipo_transacao = st.radio("Tipo de Transação", ["compra", "venda"], horizontal=True)
-            data_transacao = st.date_input("Data da Transação", value=utils.get_local_today())
-        with col2:
-            quantidade = st.number_input("Quantidade", min_value=0.0, format="%.8f")
-            preco_unitario = st.number_input("Preço Unitário (R$)", min_value=0.0, format="%.2f")
+            if st.form_submit_button("Registrar Transação"):
+                if ativo_codigo and quantidade > 0 and preco_unitario > 0:
+                    investimento_id = investimentos_dict[ativo_codigo]
+                    database.add_transacao_investimento(investimento_id, tipo_transacao, data_transacao.isoformat(), quantidade, preco_unitario)
+                    st.success("Transação registrada com sucesso!")
+                    st.rerun()
+                else:
+                    st.warning("Preencha todos os campos corretamente.")
 
-        if st.form_submit_button("Registrar Transação"):
-            if ativo_codigo and quantidade > 0 and preco_unitario > 0:
-                investimento_id = investimentos_dict[ativo_codigo]
-                database.add_transacao_investimento(investimento_id, tipo_transacao, data_transacao.isoformat(), quantidade, preco_unitario)
-                st.success("Transação registrada com sucesso!")
-                st.rerun()
-            else:
-                st.warning("Preencha todos os campos corretamente.")
-
+    # --- INÍCIO DA CORREÇÃO ---
     with st.expander("Não encontrou seu ativo? Cadastre um novo aqui"):
         with st.form("form_novo_ativo"):
+            st.markdown("#### Detalhes do Novo Ativo")
             tipos_investimento = database.get_tipos_investimento()
             tipos_dict = {tipo[1]: tipo[0] for tipo in tipos_investimento}
             
-            novo_codigo = st.text_input("Código/Apelido do Ativo (ex: PETR4, CDB Banco X)")
-            nova_descricao = st.text_input("Descrição (ex: Petrobras PN, CDB 105% CDI)")
-            novo_tipo_nome = st.selectbox("Tipo de Investimento", options=list(tipos_dict.keys()))
-            
-            # Campos condicionais para Renda Fixa
+            col_a, col_b = st.columns(2)
+            with col_a:
+                novo_codigo = st.text_input("Código/Apelido do Ativo (ex: PETR4, CDB Banco X)")
+                novo_tipo_nome = st.selectbox("Tipo de Investimento", options=list(tipos_dict.keys()))
+            with col_b:
+                nova_descricao = st.text_input("Descrição (ex: Petrobras PN, CDB 105% CDI)")
+
+            # Campos condicionais que aparecem apenas para Renda Fixa
             indexador = None
             taxa_percentual = None
             data_vencimento = None
             if novo_tipo_nome == 'Renda Fixa':
-                indexador = st.selectbox("Indexador", ["CDI", "IPCA", "Prefixado"])
-                taxa_percentual = st.number_input(f"Taxa/Percentual do {indexador}", min_value=0.0, format="%.2f")
-                data_vencimento = st.date_input("Data de Vencimento", value=utils.get_local_today() + relativedelta(years=2))
+                st.markdown("##### Detalhes da Renda Fixa")
+                col_c, col_d, col_e = st.columns(3)
+                with col_c:
+                    indexador = st.selectbox("Indexador", ["CDI", "IPCA", "Prefixado"])
+                with col_d:
+                    taxa_percentual = st.number_input(f"Taxa/Percentual do {indexador}", min_value=0.0, format="%.2f")
+                with col_e:
+                    data_vencimento = st.date_input("Data de Vencimento", value=utils.get_local_today() + relativedelta(years=2))
 
             if st.form_submit_button("Cadastrar Novo Ativo"):
-                try:
-                    tipo_id = tipos_dict[novo_tipo_nome]
-                    database.add_investimento(user_id, tipo_id, novo_codigo, nova_descricao, indexador, taxa_percentual, data_vencimento)
-                    st.success(f"Ativo {novo_codigo.upper()} cadastrado com sucesso!")
-                    st.rerun()
-                except ValueError as e:
-                    st.error(e)
+                if novo_codigo and novo_tipo_nome:
+                    try:
+                        tipo_id = tipos_dict[novo_tipo_nome]
+                        # Chama a função do banco de dados passando os novos parâmetros
+                        database.add_investimento(
+                            user_id, tipo_id, novo_codigo, nova_descricao, 
+                            indexador, taxa_percentual, data_vencimento
+                        )
+                        st.success(f"Ativo {novo_codigo.upper()} cadastrado com sucesso!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao cadastrar ativo: {e}")
+                else:
+                    st.warning("Preencha pelo menos o Código e o Tipo de Investimento.")
 
     st.markdown("---")
     st.markdown("### Histórico de Transações")
