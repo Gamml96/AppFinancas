@@ -10,7 +10,7 @@ from dateutil.relativedelta import relativedelta
 
 
 def main():
-    st.set_page_config("App Finanças", layout="wide", initial_sidebar_state="collapsed",page_icon="🪙")
+    st.set_page_config("App Finanças", layout="wide", initial_sidebar_state= 'expanded',page_icon="🪙")
     
     # CSS para ocultar a sidebar se o usuário estiver deslogado
     hide_sidebar_nav_css = """
@@ -42,13 +42,13 @@ def main():
     if st.session_state.get("authentication_status"):
         # Se logado, mostra a saudação na barra lateral e o botão de logout
         with st.sidebar:
-            st.subheader(f"Bem-vindo, {st.session_state['name']}!")
-            st.markdown("---")
+            # st.subheader(f"Bem-vindo, {st.session_state['name']}!")
+            # st.markdown("---")
             authenticator.logout("Logout", "sidebar", key="logout_button")
         
         # Mensagem de boas-vindas na página principal
         # O Streamlit automaticamente redirecionará para a primeira página da pasta 'pages'
-        st.title("Bem-vindo ao App Finanças! 👋")
+        st.title(f"Bem-vindo, {st.session_state['name']}! 👋")
         st.info("👈 Selecione uma opção na barra lateral para começar.")
 
     else:

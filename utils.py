@@ -38,8 +38,8 @@ def check_authentication():
         username = st.session_state['username']
         
         with st.sidebar:
-            st.subheader(f"Bem-vindo, {st.session_state['name']}!")
-            st.markdown("---")
+            # st.subheader(f"Bem-vindo, {st.session_state['name']}!")
+            # st.markdown("---")
             authenticator.logout("Logout", "sidebar", key="logout_button")
         # Lógica para usuário DESLOGADO (sem cadastro)
     else:
