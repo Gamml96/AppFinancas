@@ -57,7 +57,7 @@ def get_current_price(ticker, tipo_ativo):
         return price
     except Exception as e:
         # st.warning(f"Não foi possível buscar a cotação para {ticker}: {e}")
-        return 0.0
+        return 1
 
 
 def _ajustar_data_para_sexta_anterior(data_obj):
