@@ -248,46 +248,45 @@ with tab_transacoes:
 with tab_ativos:
     st.markdown("### Cadastrar Novo Ativo")
     with st.form("form_novo_ativo"):
-                st.markdown("#### Detalhes do Novo Ativo")
-                tipos_investimento = database.get_tipos_investimento()
-                tipos_dict = {tipo[1]: tipo[0] for tipo in tipos_investimento}
-                
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    novo_codigo = st.text_input("Código/Apelido do Ativo (ex: PETR4, CDB Banco X)")
-                    novo_tipo_nome = st.selectbox("Tipo de Investimento", options=list(tipos_dict.keys()))
-                with col_b:
-                    nova_descricao = st.text_input("Descrição (ex: Petrobras PN, CDB 105% CDI)")
+        st.markdown("#### Detalhes do Novo Ativo")
+        tipos_investimento = database.get_tipos_investimento()
+        tipos_dict = {tipo[1]: tipo[0] for tipo in tipos_investimento}
+        
+        col_a, col_b = st.columns(2)
+        with col_a:
+            novo_codigo = st.text_input("Código/Apelido do Ativo (ex: PETR4, CDB Banco X)")
+            novo_tipo_nome = st.selectbox("Tipo de Investimento", options=list(tipos_dict.keys()))
+        with col_b:
+            nova_descricao = st.text_input("Descrição (ex: Petrobras PN, CDB 105% CDI)")
 
-                # Campos condicionais que aparecem apenas para Renda Fixa
-                indexador = None
-                taxa_percentual = None
-                data_vencimento = None
-                if novo_tipo_nome == 'Renda Fixa':
-                    st.markdown("##### Detalhes da Renda Fixa")
-                    col_c, col_d, col_e = st.columns(3)
-                    with col_c:
-                        indexador = st.selectbox("Indexador", ["CDI", "IPCA", "Prefixado"])
-                    with col_d:
-                        taxa_percentual = st.number_input(f"Taxa/Percentual do {indexador}", min_value=0.0, format="%.2f")
-                    with col_e:
-                        data_vencimento = st.date_input("Data de Vencimento", value=utils.get_local_today() + relativedelta(years=2))
+        # Campos condicionais que aparecem apenas para Renda Fixa
+        indexador = None
+        taxa_percentual = None
+        data_vencimento = None
+        if novo_tipo_nome == 'Renda Fixa':
+            st.markdown("##### Detalhes da Renda Fixa")
+            col_c, col_d, col_e = st.columns(3)
+            with col_c:
+                indexador = st.selectbox("Indexador", ["CDI", "IPCA", "Prefixado"])
+            with col_d:
+                taxa_percentual = st.number_input(f"Taxa/Percentual do {indexador}", min_value=0.0, format="%.2f")
+            with col_e:
+                data_vencimento = st.date_input("Data de Vencimento", value=utils.get_local_today() + relativedelta(years=2))
 
-                if st.form_submit_button("Cadastrar Novo Ativo"):
-                    if novo_codigo and novo_tipo_nome:
-                        try:
-                            tipo_id = tipos_dict[novo_tipo_nome]
-                            # Chama a função do banco de dados passando os novos parâmetros
-                            database.add_investimento(
-                                user_id, tipo_id, novo_codigo, nova_descricao, 
-                                indexador, taxa_percentual, data_vencimento
-                            )
-                            st.success(f"Ativo {novo_codigo.upper()} cadastrado com sucesso!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Erro ao cadastrar ativo: {e}")
-                    else:
-                        st.warning("Preencha pelo menos o Código e o Tipo de Investimento.")
+        if st.form_submit_button("Cadastrar Novo Ativo"):
+            if novo_codigo and novo_tipo_nome:
+                try:
+                    tipo_id = tipos_dict[novo_tipo_nome]
+                    database.add_investimento(
+                        user_id, tipo_id, novo_codigo, nova_descricao, 
+                        indexador, taxa_percentual, data_vencimento
+                    )
+                    st.success(f"Ativo {novo_codigo.upper()} cadastrado com sucesso!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao cadastrar ativo: {e}")
+            else:
+                st.warning("Preencha pelo menos o Código e o Tipo de Investimento.")
 
     st.markdown("---")
     st.markdown("### Ativos Cadastrados")
@@ -296,6 +295,7 @@ with tab_ativos:
     if not todos_ativos:
         st.info("Nenhum ativo cadastrado. Use o formulário acima para começar.")
     else:
+        # --- INÍCIO DO BLOCO CORRIGIDO (AGORA INDENTADO) ---
         df_ativos = pd.DataFrame(todos_ativos, columns=["ID", "Código", "Descrição", "Tipo", "Indexador", "Taxa %", "Vencimento"])
         df_ativos["Excluir"] = False
 
@@ -304,11 +304,11 @@ with tab_ativos:
             use_container_width=True,
             hide_index=True,
             column_config={
-                "ID": None, # Oculta a coluna ID
+                "ID": None,
                 "Código": st.column_config.TextColumn("Código", disabled=True),
                 "Tipo": st.column_config.TextColumn("Tipo", disabled=True),
                 "Descrição": st.column_config.TextColumn("Descrição", required=True),
-                "Indexador": st.column_config.SelectboxColumn("Indexador", options=["CDI", "IPCA", "Prefixado"]),
+                "Indexador": st.column_config.SelectboxColumn("Indexador", options=["CDI", "IPCA", "Prefixado"], required=False),
                 "Taxa %": st.column_config.NumberColumn("Taxa %", format="%.2f"),
                 "Vencimento": st.column_config.DateColumn("Vencimento"),
                 "Excluir": st.column_config.CheckboxColumn("Excluir?", default=False)
@@ -332,12 +332,15 @@ with tab_ativos:
                 st.rerun()
 
         if col_delete.button("Excluir Ativos Selecionados", type="primary"):
-            selected_to_delete = edited_df[edited_df["Excluir"]]
-            if not selected_to_delete.empty:
-                for _, row in selected_to_delete.iterrows():
-                    database.delete_ativo(int(row["ID"]), user_id)
-                st.success(f"{len(selected_to_delete)} ativo(s) excluído(s)!")
-                st.rerun()
-            else:
-                st.info("Nenhum ativo selecionado para exclusão.")
-
+            # Acessamos o estado editado para garantir que pegamos a marcação mais recente
+            if "editor_ativos" in st.session_state:
+                df_para_deletar = pd.DataFrame(st.session_state["editor_ativos"])
+                selected_to_delete = df_para_deletar[df_para_deletar["Excluir"]]
+                
+                if not selected_to_delete.empty:
+                    for _, row in selected_to_delete.iterrows():
+                        database.delete_ativo(int(row["ID"]), user_id)
+                    st.success(f"{len(selected_to_delete)} ativo(s) excluído(s)!")
+                    st.rerun()
+                else:
+                    st.info("Nenhum ativo selecionado para exclusão.")
