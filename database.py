@@ -405,6 +405,29 @@ def delete_transacao_investimento(transacao_id):
     _execute_query("DELETE FROM transacoes_investimento WHERE transacao_id = %s", (transacao_id,), commit=True)
     st.cache_data.clear()
     
+# --- Orçamento ---
+
+@st.cache_data
+def get_orcamentos(user_id):
+    """Busca todos os orçamentos definidos por um usuário."""
+    query = "SELECT categoria_nome, limite_mensal FROM orcamentos WHERE user_id = %s"
+    return _execute_query(query, (user_id,), fetch='all')
+
+def set_orcamento(user_id, categoria_nome, limite):
+    """
+    Insere ou atualiza o limite de orçamento para uma categoria específica.
+    Usa a funcionalidade 'ON CONFLICT' do PostgreSQL para fazer um 'UPSERT'.
+    """
+    query = """
+        INSERT INTO orcamentos (user_id, categoria_nome, limite_mensal)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (user_id, categoria_nome) 
+        DO UPDATE SET limite_mensal = EXCLUDED.limite_mensal;
+    """
+    _execute_query(query, (user_id, categoria_nome, float(limite)))
+    st.cache_data.clear()
+
+    
 # -------- Relatórios e Consolidações --------
 @st.cache_data
 def get_proximos_lancamentos(user_id, dias_futuros=7):
