@@ -4,6 +4,7 @@ import pandas as pd
 import datetime
 import utils
 import plotly.express as px
+from dateutil.relativedelta import relativedelta
 
 # Lógica para usuário LOGADO
 import streamlit_authenticator as stauth
