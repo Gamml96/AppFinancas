@@ -8,6 +8,7 @@ import psycopg2.extras
 import os
 from dotenv import load_dotenv
 import utils
+import time
 
 # --- FUNÇÃO CENTRAL DE CONEXÃO ---
 def _get_db_connection():
