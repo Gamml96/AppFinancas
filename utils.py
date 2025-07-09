@@ -5,6 +5,7 @@ import datetime
 from dateutil.relativedelta import relativedelta
 from zoneinfo import ZoneInfo 
 import requests
+import streamlit_authenticator as stauth
 
 def formatar_moeda_brl(valor):
     """Formata um número para o padrão de moeda brasileiro (R$ 1.234,56)."""
@@ -25,6 +26,31 @@ def check_authentication():
     Verifica se o usuário está logado. Se não, para a execução.
     Se sim, retorna o perfil e o user_id.
     """
+    # Lógica para usuário LOGADO
+    credentials = database.get_authenticator_credentials()
+    authenticator = stauth.Authenticate(
+        credentials, 
+        cookie_name="app_fin_cookie",
+        key="app_fin_key", 
+        cookie_expiry_days=30
+    )
+    if st.session_state.get("authentication_status"):
+        username = st.session_state['username']
+        
+        with st.sidebar:
+            st.subheader(f"Bem-vindo, {st.session_state['name']}!")
+            st.markdown("---")
+            authenticator.logout("Logout", "sidebar", key="logout_button")
+        # Lógica para usuário DESLOGADO (sem cadastro)
+    else:
+        st.subheader("Acesse sua conta")
+        authenticator.login(fields={'Form name': 'Login'})
+        
+        if st.session_state.get("authentication_status") is False:
+            st.error("Usuário ou senha incorretos.")
+        elif st.session_state.get("authentication_status") is None:
+            st.warning("Por favor, insira seu usuário e senha.")
+
     if not st.session_state.get("authentication_status"):
         st.info("Por favor, faça o login para acessar esta página.")
         st.stop()
@@ -33,7 +59,7 @@ def check_authentication():
     profile = database.get_user_profile(username)
     user_id = profile['user_id']
     
-    return profile, user_id, username
+    return profile, user_id, username, credentials, authenticator
 
 @st.cache_data(ttl=3600) # Cache de 1 hora para não sobrecarregar a API
 def get_current_price(ticker, tipo_ativo):
