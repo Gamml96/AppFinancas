@@ -175,6 +175,7 @@ with tab_transacoes:
                 with col_a:
                     novo_codigo = st.text_input("Código/Apelido do Ativo (ex: PETR4, CDB Banco X)")
                     novo_tipo_nome = st.selectbox("Tipo de Investimento", options=list(tipos_dict.keys()))
+                    st.write(f"DEBUG: Tipo selecionado é '{novo_tipo_nome}'")
                 with col_b:
                     nova_descricao = st.text_input("Descrição (ex: Petrobras PN, CDB 105% CDI)")
 
@@ -256,6 +257,7 @@ with tab_ativos:
         with col_a:
             novo_codigo = st.text_input("Código/Apelido do Ativo (ex: PETR4, CDB Banco X)")
             novo_tipo_nome = st.selectbox("Tipo de Investimento", options=list(tipos_dict.keys()))
+            st.write(f"DEBUG: Tipo selecionado é '{novo_tipo_nome}'")
         with col_b:
             nova_descricao = st.text_input("Descrição (ex: Petrobras PN, CDB 105% CDI)")
 
