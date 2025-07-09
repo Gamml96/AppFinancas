@@ -48,7 +48,7 @@ def main():
         
         # Mensagem de boas-vindas na página principal
         # O Streamlit automaticamente redirecionará para a primeira página da pasta 'pages'
-        st.switch_page("pages/0_📊_Visão_Geral.py")
+        st.switch_page("pages/0_🏠_Visão_Geral.py")
         st.title(f"Bem-vindo, {st.session_state['name']}! 👋")
         st.info("👈 Selecione uma opção na barra lateral para começar.")
 
