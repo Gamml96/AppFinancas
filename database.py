@@ -424,10 +424,10 @@ def set_orcamento(user_id, categoria_nome, limite):
         ON CONFLICT (user_id, categoria_nome) 
         DO UPDATE SET limite_mensal = EXCLUDED.limite_mensal;
     """
-    _execute_query(query, (user_id, categoria_nome, float(limite)))
+    _execute_query(query, (user_id, categoria_nome, float(limite)),commit=True)
     st.cache_data.clear()
 
-    
+
 # -------- Relatórios e Consolidações --------
 @st.cache_data
 def get_proximos_lancamentos(user_id, dias_futuros=7):
