@@ -173,7 +173,7 @@ with tab_transacoes:
         col_a, col_b = st.columns(2)
         with col_a:
             # Usamos uma chave para o selectbox para ajudar o Streamlit a rastrear seu estado
-            novo_tipo_nome = st.selectbox("Tipo de Investimento", options=list(tipos_dict.keys()), key="tipo_ativo_selecionado")
+            novo_tipo_nome = st.selectbox("Tipo de Investimento", options=list(tipos_dict.keys()), key="tipo_ativo_selecionado_expander")
             novo_codigo = st.text_input("Código/Apelido do Ativo (ex: PETR4, CDB Banco X)")
         with col_b:
             nova_descricao = st.text_input("Descrição (ex: Petrobras PN, CDB 105% CDI)")
