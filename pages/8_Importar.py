@@ -61,57 +61,107 @@ def gerar_template_csv_investimentos():
 # --- FUNÇÕES DE PROCESSAMENTO OTIMIZADAS ---
 
 def processar_importacao_receitas(df, user_id, contas):
-    contas_dict = {conta[1].lower(): conta[0] for conta in contas}
+    contas_dict = {str(conta[1]).lower(): conta[0] for conta in contas}
     dados_para_inserir = []
     erros = []
+
+    # Verificação inicial das colunas
+    colunas_necessarias = ['data', 'descricao', 'valor', 'conta', 'categoria']
+    colunas_faltando = [col for col in colunas_necessarias if col not in df.columns]
+    if colunas_faltando:
+        st.error(f"O arquivo enviado não contém as colunas obrigatórias: {', '.join(colunas_faltando)}. Por favor, use o template.")
+        return
+
     for index, row in df.iterrows():
+        linha_num = index + 2
         try:
             descricao = str(row['descricao'])
+            if not descricao.strip():
+                raise ValueError("A coluna 'descricao' não pode estar vazia.")
+
             valor = float(str(row['valor']).replace(",", "."))
+            if valor <= 0:
+                raise ValueError("O 'valor' deve ser maior que zero.")
+
             data = pd.to_datetime(row['data'], dayfirst=True).date()
             conta_nome = str(row['conta']).lower()
+            if conta_nome not in contas_dict:
+                raise ValueError(f"A conta '{row['conta']}' não foi encontrada.")
+
             categoria_nome = str(row['categoria'])
-            if conta_nome not in contas_dict: raise ValueError(f"Conta '{row['conta']}' não encontrada.")
             categoria_final = database.get_or_create_categoria_receita(user_id, categoria_nome)
             dados_para_inserir.append((contas_dict[conta_nome], data.isoformat(), valor, categoria_final, descricao))
+
+        except ValueError as e:
+            erros.append(f"Linha {linha_num}: Erro de valor em '{row.get('descricao', 'N/A')}' -> {e}")
+        except KeyError as e:
+            erros.append(f"Linha {linha_num}: Coluna obrigatória não encontrada -> {e}")
         except Exception as e:
-            erros.append(f"Linha {index + 2}: {row.get('descricao', 'N/A')} - Erro: {e}")
-    
+            erros.append(f"Linha {linha_num}: Erro inesperado em '{row.get('descricao', 'N/A')}' -> {e}")
+
     if dados_para_inserir:
         database.batch_insert_receitas(user_id, dados_para_inserir)
         st.success(f"{len(dados_para_inserir)} receitas importadas com sucesso!")
     if erros:
         st.error(f"{len(erros)} linhas não puderam ser importadas:")
-        with st.expander("Ver detalhes dos erros"): [st.write(erro) for erro in erros]
+        with st.expander("Ver detalhes dos erros"):
+            for erro in erros:
+                st.write(erro)
 
 def processar_importacao_despesas(df, user_id, contas):
-    contas_dict = {conta[1].lower(): conta[0] for conta in contas}
+    contas_dict = {str(conta[1]).lower(): conta[0] for conta in contas}
     dados_para_inserir = []
     erros = []
+
+    # Adiciona uma verificação inicial das colunas necessárias
+    colunas_necessarias = ['data_compra', 'descricao', 'valor_total', 'conta', 'categoria', 'tipo_pagamento', 'parcelas']
+    colunas_faltando = [col for col in colunas_necessarias if col not in df.columns]
+    if colunas_faltando:
+        st.error(f"O arquivo enviado não contém as colunas obrigatórias: {', '.join(colunas_faltando)}. Por favor, use o template.")
+        return # Interrompe a execução se colunas essenciais não existirem
+
     for index, row in df.iterrows():
+        linha_num = index + 2 # +2 para corresponder ao número da linha no arquivo CSV (considerando o cabeçalho)
         try:
+            # --- Validação e Conversão de Dados ---
             descricao_base = str(row['descricao'])
-            valor = float(str(row['valor_total']).replace(",", "."))
+            if not descricao_base.strip():
+                raise ValueError("A coluna 'descricao' não pode estar vazia.")
+
+            valor_str = str(row['valor_total']).replace(",", ".")
+            valor = float(valor_str)
+            if valor <= 0:
+                raise ValueError("O 'valor_total' deve ser maior que zero.")
+
             data_compra = pd.to_datetime(row['data_compra'], dayfirst=True).date()
+
             conta_nome = str(row['conta']).lower()
+            if conta_nome not in contas_dict:
+                raise ValueError(f"A conta '{row['conta']}' não foi encontrada em seu cadastro. Verifique o nome ou cadastre-a primeiro.")
+
             categoria_nome = str(row['categoria'])
             tipo_pagamento = str(row['tipo_pagamento']).lower()
-            parcelas = int(row['parcelas'])
+            if tipo_pagamento not in ['crédito', 'débito']:
+                raise ValueError("O 'tipo_pagamento' deve ser 'crédito' ou 'débito'.")
 
-            if conta_nome not in contas_dict: raise ValueError(f"Conta '{row['conta']}' não encontrada.")
-            if tipo_pagamento not in ['crédito', 'débito']: raise ValueError("Tipo de pagamento inválido.")
-            
+            parcelas = int(row['parcelas'])
+            if parcelas < 1:
+                raise ValueError("O número de 'parcelas' deve ser no mínimo 1.")
+
+            # --- Lógica de Negócio (já existente) ---
             conta_id = contas_dict[conta_nome]
             categoria_final = database.get_or_create_categoria_despesa(user_id, categoria_nome)
-            
-            # Lógica de cálculo de parcelas (movida para cá)
             valor_parcela_padrao = round(valor / parcelas, 2)
             diferenca = round(valor - (valor_parcela_padrao * parcelas), 2)
             valor_primeira_parcela = valor_parcela_padrao + diferenca
             grupo_id = int(datetime.datetime.now().timestamp() * 1000) + index
 
             if tipo_pagamento == 'crédito':
-                conta_info = next((c for c in contas if c[0] == conta_id), None)
+                # Busca informações da conta para cálculo de vencimento
+                conta_info_list = [c for c in contas if c[0] == conta_id]
+                if not conta_info_list:
+                     raise ValueError(f"Não foi possível encontrar detalhes da conta de crédito '{row['conta']}'.")
+                conta_info = conta_info_list[0]
                 primeiro_vencimento = utils._calcular_vencimento_credito(data_compra, conta_info[2], conta_info[5])
             else:
                 primeiro_vencimento = data_compra
@@ -122,15 +172,23 @@ def processar_importacao_despesas(df, user_id, contas):
                 descricao_parcela = f"{descricao_base} ({i+1}/{parcelas})" if parcelas > 1 else descricao_base
                 dados_para_inserir.append((conta_id, data_compra.isoformat(), vencimento_parcela.isoformat(), valor_a_inserir, categoria_final, tipo_pagamento, i + 1, descricao_parcela, grupo_id))
 
-        except Exception as e:
-            erros.append(f"Linha {index + 2}: {row.get('descricao', 'N/A')} - Erro: {e}")
+        # --- Captura de Erros Específicos ---
+        except ValueError as e:
+            erros.append(f"Linha {linha_num}: Erro de valor em '{row.get('descricao', 'N/A')}' -> {e}")
+        except KeyError as e:
+            erros.append(f"Linha {linha_num}: Coluna obrigatória não encontrada -> {e}")
+        except Exception as e: # Captura qualquer outro erro inesperado
+            erros.append(f"Linha {linha_num}: Erro inesperado em '{row.get('descricao', 'N/A')}' -> {e}")
 
+    # --- Feedback Final para o Usuário ---
     if dados_para_inserir:
         database.batch_insert_despesas(user_id, dados_para_inserir)
         st.success(f"{len(dados_para_inserir)} parcelas de despesas importadas com sucesso!")
     if erros:
-        st.error(f"{len(erros)} linhas não puderam ser importadas:")
-        with st.expander("Ver detalhes dos erros"): [st.write(erro) for erro in erros]
+        st.error(f"{len(erros)} linhas não puderam ser importadas. Corrija os erros no arquivo e tente novamente.")
+        with st.expander("Ver detalhes dos erros"):
+            for erro in erros:
+                st.write(erro)
 
 def processar_importacao_investimentos(df, user_id):
     """Função que itera sobre o DataFrame e insere as transações, criando ativos complexos se necessário."""
