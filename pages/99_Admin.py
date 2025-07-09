@@ -5,35 +5,11 @@ import datetime
 import utils
 import bcrypt
 
-# Lógica para usuário LOGADO
-import streamlit_authenticator as stauth
-credentials = database.get_authenticator_credentials()
-authenticator = stauth.Authenticate(
-    credentials, 
-    cookie_name="app_fin_cookie",
-    key="app_fin_key", 
-    cookie_expiry_days=30
-)
-if st.session_state.get("authentication_status"):
-    username = st.session_state['username']
-    
-    with st.sidebar:
-        st.subheader(f"Bem-vindo, {st.session_state['name']}!")
-        st.markdown("---")
-        authenticator.logout("Logout", "sidebar", key="logout_button")
-    # Lógica para usuário DESLOGADO (sem cadastro)
-else:
-    st.subheader("Acesse sua conta")
-    authenticator.login(fields={'Form name': 'Login'})
-    
-    if st.session_state.get("authentication_status") is False:
-        st.error("Usuário ou senha incorretos.")
-    elif st.session_state.get("authentication_status") is None:
-        st.warning("Por favor, insira seu usuário e senha.")
+
 
 # --- Guarda de Autenticação ---
 try:
-    profile, user_id, username = utils.check_authentication()
+    profile, user_id, username, credentials, authenticator = utils.check_authentication()
 except:
     st.info("Por favor, faça o login para acessar esta página.")
     st.stop()
