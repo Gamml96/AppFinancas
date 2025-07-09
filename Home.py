@@ -207,7 +207,7 @@ def render_home_page(user_id):
 
 # --- LÓGICA PRINCIPAL DE AUTENTICAÇÃO ---
 def main():
-    st.set_page_config("App Finanças", layout="wide", initial_sidebar_state="collapsed")
+    st.set_page_config("App Finanças", layout="wide", initial_sidebar_state="collapsed",page_icon="🏠")
     
     # CSS para ocultar a sidebar se o usuário estiver deslogado
     hide_sidebar_nav_css = """
