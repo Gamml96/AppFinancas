@@ -11,7 +11,6 @@ from dateutil.relativedelta import relativedelta
 # --- Guarda de Autenticação ---
 profile, user_id, username, credentials, authenticator = utils.check_authentication()
 
-
 # --- Conteúdo da Página ---
 st.title("Visão Geral Financeira")
 st.markdown("---")
