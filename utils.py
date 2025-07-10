@@ -87,35 +87,63 @@ def get_current_price(ticker, tipo_ativo):
         # st.warning(f"Não foi possível buscar a cotação para {ticker}: {e}")
         return 0.0
 
-@st.cache_data(ttl=43200) # Cache de 12 horas, pois a taxa DI só muda uma vez por dia útil
-def get_cdi_acumulado(data_inicio, data_fim):
+# --- FUNÇÃO GENÉRICA PARA BUSCAR DADOS DO BANCO CENTRAL ---
+@st.cache_data(ttl=43200) # Cache de 12 horas
+def _get_bcb_series(codigo_serie, data_inicio, data_fim):
     """
-    Busca os dados da taxa DI do Banco Central e calcula o fator de rendimento acumulado.
+    Busca uma série temporal específica do Sistema Gerenciador de Séries Temporais (SGS) do Banco Central.
     """
     try:
-        # Formata as datas para o padrão da API do BCB
         data_inicio_str = data_inicio.strftime('%d/%m/%Y')
         data_fim_str = data_fim.strftime('%d/%m/%Y')
         
-        # O código 12 se refere à "Taxa de juros - CDI" na API do SGS do BCB
-        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados?formato=json&dataInicial={data_inicio_str}&dataFinal={data_fim_str}"
+        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo_serie}/dados?formato=json&dataInicial={data_inicio_str}&dataFinal={data_fim_str}"
         
         response = requests.get(url)
-        response.raise_for_status() # Lança um erro se a requisição falhar
-        dados_cdi = response.json()
+        response.raise_for_status()
+        dados = response.json()
         
-        if not dados_cdi:
-            return 1.0 # Retorna 1.0 se não houver dados (sem rendimento)
-
-        fator_acumulado = 1.0
-        for registro_diario in dados_cdi:
-            taxa_diaria = float(registro_diario['valor']) / 100
-            fator_acumulado *= (1 + taxa_diaria)
+        if not dados:
+            return None
             
-        return fator_acumulado
+        return dados
     except Exception as e:
-        st.error(f"Não foi possível buscar os dados do CDI: {e}")
-        return 1.0 # Retorna 1.0 em caso de erro
+        st.error(f"Não foi possível buscar os dados da série {codigo_serie} do BCB: {e}")
+        return None
+
+# --- FUNÇÕES ESPECÍFICAS PARA CADA ÍNDICE ---
+
+def get_cdi_acumulado(data_inicio, data_fim):
+    """
+    Busca os dados da taxa DI (código 12) e calcula o fator de rendimento acumulado.
+    """
+    dados_cdi = _get_bcb_series(12, data_inicio, data_fim)
+    
+    if dados_cdi is None:
+        return 1.0 # Retorna 1.0 se não houver dados (sem rendimento)
+
+    fator_acumulado = 1.0
+    for registro_diario in dados_cdi:
+        taxa_diaria = float(registro_diario['valor']) / 100
+        fator_acumulado *= (1 + taxa_diaria)
+            
+    return fator_acumulado
+
+def get_ipca_acumulado(data_inicio, data_fim):
+    """
+    Busca os dados do IPCA (código 433) e calcula o fator de correção acumulado.
+    """
+    dados_ipca = _get_bcb_series(433, data_inicio, data_fim)
+    
+    if dados_ipca is None:
+        return 1.0
+
+    fator_acumulado = 1.0
+    for registro_mensal in dados_ipca:
+        taxa_mensal = float(registro_mensal['valor']) / 100
+        fator_acumulado *= (1 + taxa_mensal)
+        
+    return fator_acumulado
 
 def _ajustar_data_para_sexta_anterior(data_obj):
     if data_obj.weekday() == 5: return data_obj - datetime.timedelta(days=1)
