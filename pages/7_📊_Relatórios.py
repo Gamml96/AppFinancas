@@ -42,6 +42,42 @@ else:
 
 st.markdown("---")
 
+# --- GRÁFICO TREEMAP "PARA ONDE FOI O DINHEIRO?" ---
+st.markdown("### Para Onde Foi o Dinheiro? (Despesas por Categoria)")
+
+# A busca de dados continua a mesma
+despesas_cat = database.get_despesas_por_categoria(user_id, start_date.isoformat(), end_date.isoformat())
+
+if not despesas_cat:
+    st.info("Nenhuma despesa encontrada no período selecionado para gerar o gráfico.")
+else:
+    df_despesas_cat = pd.DataFrame(despesas_cat, columns=['Categoria', 'Total'])
+    
+    # Cria o gráfico Treemap com Plotly Express
+    fig = px.treemap(df_despesas_cat, 
+                     # Define a hierarquia: um retângulo principal e as categorias dentro dele
+                     path=[px.Constant("Todas as Despesas"), 'Categoria'], 
+                     # Define o que determina o tamanho de cada retângulo
+                     values='Total',
+                     # Define uma paleta de cores para diferenciar as categorias
+                     color='Categoria',
+                     # Título do Gráfico
+                     title='Distribuição de Despesas no Período',
+                     # Ajusta a formatação dos valores para mostrar R$
+                     custom_data=['Total']
+                    )
+    
+    # Melhora a visualização dos valores dentro de cada retângulo
+    fig.update_traces(textinfo="label+value",
+                      hovertemplate='<b>%{label}</b><br>Total Gasto: R$ %{customdata[0]:.2f}<br>Proporção: %{percentParent:.2%}')
+    
+    fig.update_layout(margin = dict(t=50, l=25, r=25, b=25))
+
+    st.plotly_chart(fig, use_container_width=True)
+
+st.markdown("---")
+
+
 # --- HISTÓRICO MENSAL (RECEITA VS DESPESA) ---
 st.markdown("### Histórico Mensal")
 receitas_mensal = database.get_total_receitas_mensal(user_id)
