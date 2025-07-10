@@ -23,8 +23,9 @@ with st.form("form_nova_receita"):
     descricao = st.text_input("Descrição")
     valor = st.number_input("Valor (de cada ocorrência)", min_value=0.01, format="%.2f")
     data = st.date_input("Data da Primeira Ocorrência", value=utils.get_local_today())
-    conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()))
     categoria_nome = st.selectbox("Categoria", options=categorias_list)
+    conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()))
+    
 
     st.markdown("---")
     col1, col2 = st.columns(2)
