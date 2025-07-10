@@ -53,8 +53,8 @@ with col1:
                 descricao_rec = st.text_input("Descrição da Receita", key="pop_rec_desc")
                 valor_rec = st.number_input("Valor", min_value=0.01, format="%.2f", key="pop_rec_val")
                 data_rec = st.date_input("Data", value=utils.get_local_today(), key="pop_rec_data")
-                conta_nome_rec = st.selectbox("Conta", options=list(contas_dict_rec.keys()), key="pop_rec_conta")
                 categoria_nome_rec = st.selectbox("Categoria", options=categorias_list_rec, key="pop_rec_cat")
+                conta_nome_rec = st.selectbox("Conta", options=list(contas_dict_rec.keys()), key="pop_rec_conta")
 
                 if st.form_submit_button("Salvar Receita"):
                     if not descricao_rec.strip() or valor_rec <= 0:
@@ -88,8 +88,8 @@ with col2:
                 data_compra_desp = st.date_input("Data da Compra", value=utils.get_local_today(), key="pop_desp_data")
                 tipo_pagamento_desp = st.radio("Pagamento", ["Crédito", "Débito"], horizontal=True, key="pop_desp_tipo")
                 parcelas_desp = st.number_input("Parcelas", min_value=1, step=1, value=1, key="pop_desp_parc")
-                conta_nome_desp = st.selectbox("Conta", options=list(contas_dict_desp.keys()), key="pop_desp_conta")
                 categoria_desp = st.selectbox("Categoria", options=categorias_list_desp, key="pop_desp_cat")
+                conta_nome_desp = st.selectbox("Conta", options=list(contas_dict_desp.keys()), key="pop_desp_conta")
 
                 if st.form_submit_button("Salvar Despesa"):
                     if not descricao_desp.strip() or valor_desp <= 0:
