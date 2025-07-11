@@ -270,25 +270,37 @@ with tab_ativos:
                 st.rerun()
 
         if col_delete.button("Excluir Ativos Selecionados", type="primary"):
-                    selected_to_delete = edited_df[edited_df["Excluir"] == True]
-                    
-                    if not selected_to_delete.empty:
-                        ids_para_deletar = selected_to_delete["ID"].tolist()
-                        
-                        # Vamos tentar deletar e capturar QUALQUER erro que o banco retornar
-                        try:
-                            # Itera sobre os IDs e chama a função de deleção para cada um
-                            for ativo_id in ids_para_deletar:
-                                database.delete_ativo(int(ativo_id), user_id)
-                            
-                            # A mensagem de sucesso só aparecerá se NENHUM erro ocorrer
-                            st.success(f"{len(ids_para_deletar)} ativo(s) foram marcados para exclusão e a operação foi enviada ao banco.")
-                            st.rerun()
+            selected_to_delete = edited_df[edited_df["Excluir"] == True]
+            
+            if not selected_to_delete.empty:
+                ids_para_deletar = selected_to_delete["ID"].tolist()
+                erros = []
+                sucessos = 0
+                
+                # Itera sobre os IDs e tenta deletar um por um
+                for ativo_id in ids_para_deletar:
+                    try:
+                        database.delete_ativo(int(ativo_id), user_id)
+                        sucessos += 1
+                    except Exception as e:
+                        # Se um erro ocorrer, captura o erro e o ID do ativo
+                        nome_ativo = selected_to_delete[selected_to_delete["ID"] == ativo_id]["Código"].iloc[0]
+                        erros.append(f"Ativo '{nome_ativo}': {e}")
 
-                        except Exception as e:
-                            # --- PONTO MAIS IMPORTANTE ---
-                            # Se o banco de dados retornar qualquer erro, ele será exibido aqui.
-                            st.error("O banco de dados recusou a exclusão. Erro retornado:")
-                            st.exception(e) # Exibe o traceback completo do erro para diagnóstico
-                    else:
-                        st.info("Nenhum ativo selecionado para exclusão.")
+                # Exibe um resumo final APÓS todas as tentativas
+                if sucessos > 0:
+                    st.success(f"{sucessos} ativo(s) excluído(s) com sucesso.")
+                
+                if erros:
+                    st.error("Alguns ativos não puderam ser excluídos:")
+                    for erro in erros:
+                        # Exibe uma mensagem mais amigável para o erro de chave estrangeira
+                        if "foreign key constraint" in erro.lower():
+                             st.warning(f"O ativo não pôde ser excluído pois possui transações registradas.")
+                        else:
+                             st.warning(erro)
+                
+                # Roda o rerun no final de tudo para atualizar a tela
+                st.rerun()
+            else:
+                st.info("Nenhum ativo selecionado para exclusão.")
