@@ -23,44 +23,57 @@ def formatar_moeda_brl(valor):
     
 def check_authentication():
     """
-    Verifica se o usuário está logado. Se não, para a execução.
-    Se sim, retorna o perfil e o user_id.
+    Função central de autenticação. Verifica se o usuário está logado.
+    Se não estiver, exibe a tela de login.
+    Se estiver, configura a sidebar e retorna os dados essenciais do usuário.
+    Levanta um st.stop() para interromper a execução da página se o login não for bem-sucedido.
     """
-    # Lógica para usuário LOGADO
+    # 1. Busca as credenciais de forma segura usando a função corrigida
     credentials = database.get_authenticator_credentials()
-
+    
+    # 2. Inicializa o objeto de autenticação
     authenticator = stauth.Authenticate(
-        credentials, 
+        credentials,
         cookie_name="app_fin_cookie",
-        key="app_fin_key", 
+        key="app_fin_key",
         cookie_expiry_days=30
     )
-    if st.session_state.get("authentication_status"):
-        username = st.session_state['username']
-        
-        with st.sidebar:
-            # st.subheader(f"Bem-vindo, {st.session_state['name']}!")
-            # st.markdown("---")
-            authenticator.logout("Logout", "sidebar", key="logout_button")
-        # Lógica para usuário DESLOGADO (sem cadastro)
-    else:
-        st.subheader("Acesse sua conta")
-        authenticator.login(fields={'Form name': 'Login'})
-        
-        if st.session_state.get("authentication_status") is False:
-            st.error("Usuário ou senha incorretos.")
-        elif st.session_state.get("authentication_status") is None:
-            st.warning("Por favor, insira seu usuário e senha.")
 
-    if not st.session_state.get("authentication_status"):
-        st.info("Por favor, faça o login para acessar esta página.")
+    # 3. Renderiza o formulário de login e lida com o estado da sessão
+    authenticator.login()
+
+    # --- Lógica para Usuário LOGADO ---
+    if st.session_state["authentication_status"]:
+        username = st.session_state['username']
+        # Configura a sidebar para o usuário logado
+        with st.sidebar:
+            st.subheader(f"Bem-vindo, {st.session_state['name']}!")
+            st.markdown("---")
+            authenticator.logout("Logout", "sidebar", key="logout_button")
+        
+        # Busca o perfil completo para obter o user_id
+        profile = database.get_user_profile(username)
+        if profile:
+            user_id = profile['user_id']
+            # Retorna todos os dados necessários para o resto da página
+            return profile, user_id, username, credentials, authenticator
+        else:
+            # Caso raro onde o usuário existe mas o perfil não é encontrado
+            st.error("Erro ao carregar o perfil do usuário. Tente fazer o login novamente.")
+            st.stop()
+
+    # --- Lógica para Tentativa de Login FALHA ---
+    elif st.session_state["authentication_status"] is False:
+        st.error('Usuário ou senha incorretos.')
         st.stop()
-    
-    username = st.session_state['username']
-    profile = database.get_user_profile(username)
-    user_id = profile['user_id']
-    
-    return profile, user_id, username, credentials, authenticator
+
+    # --- Lógica para Estado INICIAL (nenhuma tentativa de login ainda) ---
+    elif st.session_state["authentication_status"] is None:
+        st.warning('Por favor, insira seu usuário e senha para continuar.')
+        st.stop()
+
+    # Este return nunca deve ser alcançado, mas é uma boa prática
+    return None, None, None, None, None
 
 @st.cache_data(ttl=3600) # Cache de 1 hora para não sobrecarregar a API
 def get_current_price(ticker, tipo_ativo):
