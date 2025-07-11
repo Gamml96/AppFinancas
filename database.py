@@ -163,20 +163,34 @@ def get_user_profile(username):
 @st.cache_data
 def get_authenticator_credentials():
     """
-    Busca as credenciais dos usuários no formato esperado pelo streamlit-authenticator,
-    ignorando com segurança qualquer usuário que tenha um username nulo.
+    Busca as credenciais dos usuários, garantindo de forma explícita que nenhum
+    usuário com username nulo ou vazio seja processado.
     """
-    users = _execute_query("SELECT username, name, password FROM users", fetch='all')
-    
-    # Filtra usuários com username nulo para evitar erros
-    valid_users = [u for u in users if u[0] is not None]
-    
-    credentials = {
-        "usernames": {
-            u[0]: {"name": u[1], "password": u[2]} for u in valid_users
-        }
-    }
-    return credentials
+    try:
+        # Busca todas as colunas necessárias para o dicionário
+        users_data = _execute_query("SELECT username, name, password FROM users", fetch='all')
+
+        if not users_data:
+            return {"usernames": {}}
+
+        # Processamento seguro para construir o dicionário de credenciais
+        credentials = {"usernames": {}}
+        for user_tuple in users_data:
+            username, name, password = user_tuple
+            
+            # Verificação explícita: Ignora a linha se o username for Nulo ou uma string vazia
+            if username and str(username).strip():
+                credentials["usernames"][username] = {
+                    "name": name,
+                    "password": password
+                }
+        
+        return credentials
+
+    except Exception as e:
+        # Em caso de qualquer erro, retorna um dicionário vazio para não quebrar a aplicação
+        st.error(f"Erro ao carregar credenciais de usuário: {e}")
+        return {"usernames": {}}
 
 def update_user_password(username, new_password):
     hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
