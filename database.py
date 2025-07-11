@@ -507,7 +507,7 @@ def add_investimento(user_id, tipo_id, codigo, descricao, indexador=None, taxa_p
     
 # Adicione estas duas funções ao seu arquivo database.py
 
-def update_ativo(ativo_id, user_id, descricao, indexador, taxa_percentual, data_vencimento):
+def update_ativo(investimento_id, user_id, descricao, indexador, taxa_percentual, data_vencimento):
     """
     Atualiza os dados de um ativo específico de um usuário.
     """
@@ -521,18 +521,23 @@ def update_ativo(ativo_id, user_id, descricao, indexador, taxa_percentual, data_
             taxa_percentual = %s,
             data_vencimento = %s
         WHERE 
-            id = %s AND user_id = %s
+            investimento_id = %s AND user_id = %s
     """
-    params = (descricao, indexador, taxa_percentual, data_vencimento_str, ativo_id, user_id)
+    params = (descricao, indexador, taxa_percentual, data_vencimento_str, investimento_id, user_id)
+    # Garante que a transação seja salva no banco
     _execute_query(query, params, commit=True)
     st.cache_data.clear()
 
-def delete_ativo(ativo_id, user_id):
+def delete_ativo(investimento_id, user_id):
     """
-    Exclui um ativo e todas as suas transações associadas (garantido pelo ON DELETE CASCADE no DB).
+    Exclui um ativo e todas as suas transações associadas.
     """
-    query = "DELETE FROM investimentos WHERE id = %s AND user_id = %s"
-    _execute_query(query, (ativo_id, user_id), commit=True)
+    query = "DELETE FROM investimentos WHERE investimento_id = %s AND user_id = %s"
+    
+    # --- A CORREÇÃO ESTÁ AQUI ---
+    # Adicionamos commit=True para garantir que a exclusão seja salva permanentemente.
+    _execute_query(query, (investimento_id, user_id), commit=True)
+    
     st.cache_data.clear()
 
 
