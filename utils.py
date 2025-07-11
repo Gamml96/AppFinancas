@@ -26,7 +26,8 @@ def check_authentication():
     Verifica se o usuário está logado. Se não, para a execução.
     Se sim, retorna o perfil e o user_id.
     """
-
+    # Lógica para usuário LOGADO
+    credentials = database.get_authenticator_credentials()
 
     authenticator = stauth.Authenticate(
         credentials, 
