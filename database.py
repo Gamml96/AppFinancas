@@ -27,20 +27,16 @@ def _get_db_connection():
 # --- FUNÇÃO CENTRAL DE EXECUÇÃO DE QUERIES ---
 def _execute_query(query, params=None, fetch=None, commit=False, executemany_params=None):
     """
-    Executa uma query e retorna tanto o resultado quanto a mensagem de status do cursor.
+    Executa uma query no banco de dados de forma segura e centralizada.
     """
     conn = _get_db_connection()
     result = None
-    status_message = ""
     try:
         with conn.cursor() as cur:
             if executemany_params:
                 psycopg2.extras.execute_values(cur, query, executemany_params)
             else:
                 cur.execute(query, params)
-            
-            # Captura a mensagem de status (ex: "DELETE 1", "UPDATE 5")
-            status_message = cur.statusmessage
 
             if fetch == 'one':
                 result = cur.fetchone()
@@ -50,13 +46,14 @@ def _execute_query(query, params=None, fetch=None, commit=False, executemany_par
             if commit:
                 conn.commit()
     except Exception as e:
+        st.error(f"Erro de banco de dados: {e}")
+        # Em caso de erro, desfaz a transação
         conn.rollback()
-        # Propaga o erro para a interface poder tratar
-        raise e
     finally:
         conn.close()
     
     return result
+
 
 
 # --- NOVAS FUNÇÕES DE INSERÇÃO EM LOTE ---
