@@ -479,16 +479,32 @@ def get_tipos_investimento():
     return _execute_query("SELECT tipo_id, nome FROM tipos_investimento ORDER BY nome", fetch='all')
 
 def add_investimento(user_id, tipo_id, codigo, descricao, indexador=None, taxa_percentual=None, data_vencimento=None):
+    """
+    Insere um novo ativo ou atualiza um existente se o código já estiver cadastrado (UPSERT).
+    """
     # Converte data de vencimento para string se não for nula
     data_vencimento_str = data_vencimento.isoformat() if data_vencimento else None
+    
+    # Query UPSERT: Tenta inserir, em caso de conflito, atualiza.
     query = """
         INSERT INTO investimentos (user_id, tipo_id, codigo, descricao, indexador, taxa_percentual, data_vencimento) 
         VALUES (%s, %s, %s, %s, %s, %s, %s) 
-        ON CONFLICT (user_id, codigo) DO NOTHING
+        ON CONFLICT (user_id, codigo) 
+        DO UPDATE SET
+            descricao = EXCLUDED.descricao,
+            tipo_id = EXCLUDED.tipo_id,
+            indexador = EXCLUDED.indexador,
+            taxa_percentual = EXCLUDED.taxa_percentual,
+            data_vencimento = EXCLUDED.data_vencimento;
     """
     params = (user_id, tipo_id, codigo.upper(), descricao, indexador, taxa_percentual, data_vencimento_str)
-    _execute_query(query, params)
+    
+    # A função _execute_query precisa ser capaz de executar a query com os parâmetros.
+    # Assumindo que sua _execute_query faz conn.cursor().execute(query, params) e conn.commit()
+    _execute_query(query, params, commit=True) # Garanta que o commit está sendo chamado
+    
     st.cache_data.clear()
+    
 
 def get_or_create_investimento(user_id, codigo, tipo_nome, descricao="", indexador=None, taxa_percentual=None, data_vencimento=None):
     """
