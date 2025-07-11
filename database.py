@@ -27,20 +27,16 @@ def _get_db_connection():
 # --- FUNÇÃO CENTRAL DE EXECUÇÃO DE QUERIES ---
 def _execute_query(query, params=None, fetch=None, commit=False, executemany_params=None):
     """
-    Executa uma query e retorna tanto o resultado quanto a mensagem de status do cursor.
+    Executa uma query no banco de dados de forma segura e centralizada.
     """
     conn = _get_db_connection()
     result = None
-    status_message = ""
     try:
         with conn.cursor() as cur:
             if executemany_params:
                 psycopg2.extras.execute_values(cur, query, executemany_params)
             else:
                 cur.execute(query, params)
-            
-            # Captura a mensagem de status (ex: "DELETE 1", "UPDATE 5")
-            status_message = cur.statusmessage
 
             if fetch == 'one':
                 result = cur.fetchone()
@@ -50,13 +46,13 @@ def _execute_query(query, params=None, fetch=None, commit=False, executemany_par
             if commit:
                 conn.commit()
     except Exception as e:
+        st.error(f"Erro de banco de dados: {e}")
+        # Em caso de erro, desfaz a transação
         conn.rollback()
-        # Propaga o erro para a interface poder tratar
-        raise e
     finally:
         conn.close()
     
-    return result, status_message
+    return result
 
 
 # --- NOVAS FUNÇÕES DE INSERÇÃO EM LOTE ---
@@ -162,21 +158,8 @@ def get_user_profile(username):
 
 @st.cache_data
 def get_authenticator_credentials():
-    """
-    Busca as credenciais dos usuários no formato esperado pelo streamlit-authenticator,
-    ignorando com segurança qualquer usuário que tenha um username nulo.
-    """
     users = _execute_query("SELECT username, name, password FROM users", fetch='all')
-    
-    # Filtra usuários com username nulo para evitar erros
-    valid_users = [u for u in users if u[0] is not None]
-    
-    credentials = {
-        "usernames": {
-            u[0]: {"name": u[1], "password": u[2]} for u in valid_users
-        }
-    }
-    return credentials
+    return {"usernames": {u[0]: {"name": u[1], "password": u[2]} for u in users}}
 
 def update_user_password(username, new_password):
     hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -524,7 +507,7 @@ def add_investimento(user_id, tipo_id, codigo, descricao, indexador=None, taxa_p
     
 # Adicione estas duas funções ao seu arquivo database.py
 
-def update_ativo(investimento_id, user_id, descricao, indexador, taxa_percentual, data_vencimento):
+def update_ativo(ativo_id, user_id, descricao, indexador, taxa_percentual, data_vencimento):
     """
     Atualiza os dados de um ativo específico de um usuário.
     """
@@ -538,34 +521,19 @@ def update_ativo(investimento_id, user_id, descricao, indexador, taxa_percentual
             taxa_percentual = %s,
             data_vencimento = %s
         WHERE 
-            investimento_id = %s AND user_id = %s
+            id = %s AND user_id = %s
     """
-    params = (descricao, indexador, taxa_percentual, data_vencimento_str, investimento_id, user_id)
-    # Garante que a transação seja salva no banco
+    params = (descricao, indexador, taxa_percentual, data_vencimento_str, ativo_id, user_id)
     _execute_query(query, params, commit=True)
     st.cache_data.clear()
 
-def delete_ativo(investimento_id, user_id):
+def delete_ativo(ativo_id, user_id):
     """
-    Exclui um ativo e retorna True se o banco confirmar a exclusão de 1 linha.
+    Exclui um ativo e todas as suas transações associadas (garantido pelo ON DELETE CASCADE no DB).
     """
-    query = "DELETE FROM investimentos WHERE investimento_id = %s AND user_id = %s"
-    
-    try:
-        # A função _execute_query agora retorna o status
-        _, status = _execute_query(query, (investimento_id, user_id), commit=True)
-        st.cache_data.clear()
-        
-        # Verifica se o banco de dados confirmou que exatamente 1 linha foi deletada
-        if status == "DELETE 1":
-            return True
-        else:
-            # Aconteceu algo inesperado: o comando rodou sem erro, mas nada foi deletado
-            return False
-            
-    except Exception as e:
-        # Se houver um erro de banco (como violação de chave estrangeira), ele será levantado aqui
-        raise e
+    query = "DELETE FROM investimentos WHERE id = %s AND user_id = %s"
+    _execute_query(query, (ativo_id, user_id), commit=True)
+    st.cache_data.clear()
 
 
 
