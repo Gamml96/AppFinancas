@@ -8,13 +8,18 @@ import psycopg2
 import psycopg2.extras
 import os
 import time
+import pandas as pd
 
 # --- FUNÇÃO CENTRAL DE CONEXÃO ---
 def _get_db_connection():
     """Cria uma conexão com o banco de dados PostgreSQL."""
     try:
-        # Garante que as secrets do Streamlit estão sendo usadas para a conexão
-        conn = psycopg2.connect(**st.secrets["postgres"])
+        # Verifica se a secret está configurada com uma connection_uri
+        if "connection_uri" in st.secrets["postgres"]:
+            conn = psycopg2.connect(st.secrets["postgres"]["connection_uri"])
+        else:
+            # Caso contrário, usa os parâmetros individuais (host, dbname, etc.)
+            conn = psycopg2.connect(**st.secrets["postgres"])
         return conn
     except Exception as e:
         st.error(f"Erro ao conectar com o banco de dados: {e}")
@@ -99,8 +104,9 @@ def get_user_profile(username):
     user = _execute_query("SELECT user_id, name, email FROM users WHERE username = %s", (username,), fetch='one')
     return {"user_id": user[0], "name": user[1], "email": user[2]} if user else None
 
-def add_user(username, name, email, hashed_password, is_admin=False):
+def add_user(username, name, email, password, is_admin=False):
     """Adiciona um novo usuário."""
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     _execute_query("INSERT INTO users (username, name, email, password, is_admin) VALUES (%s, %s, %s, %s, %s)",
                    (username, name, email, hashed_password, is_admin), commit=True)
     st.cache_data.clear()
@@ -138,14 +144,14 @@ def delete_user_financial_data(user_id):
         "DELETE FROM receitas WHERE user_id = %s",
         "DELETE FROM despesas WHERE user_id = %s",
         "DELETE FROM categorias WHERE user_id = %s",
-        "DELETE FROM investimentos WHERE user_id = %s", # ON DELETE CASCADE cuidará das transações
+        "DELETE FROM investimentos WHERE user_id = %s",
         "DELETE FROM contas WHERE user_id = %s"
     ]
     for query in queries:
         _execute_query(query, (user_id,), commit=True)
     st.cache_data.clear()
 
-def delete_all_user_data(user_id):
+def delete_all_user_data(user_id, username):
     """Deleta um usuário e todos os seus dados (via ON DELETE CASCADE no DB)."""
     _execute_query("DELETE FROM users WHERE user_id = %s", (user_id,), commit=True)
     st.cache_data.clear()
@@ -277,7 +283,6 @@ def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pa
                    executemany_params=dados_para_inserir, commit=True)
     st.cache_data.clear()
 
-# -------- Funções de Relatórios e Consultas --------
 @st.cache_data
 def get_receitas(user_id):
     """Busca todas as receitas de um usuário."""
@@ -288,7 +293,6 @@ def get_despesas(user_id):
     """Busca todas as despesas de um usuário."""
     return _execute_query("SELECT despesa_id, user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao, recorrencia, parcela_grupo_id FROM despesas WHERE user_id = %s ORDER BY data_vencimento DESC", (user_id,), fetch='all')
 
-# -------- Funções de Atualização e Exclusão --------
 def update_receita(receita_id, user_id, conta_id, data, valor, categoria, descricao):
     """Atualiza uma receita."""
     query = "UPDATE receitas SET conta_id = %s, data = %s, valor = %s, categoria = %s, descricao = %s WHERE receita_id = %s AND user_id = %s"
@@ -311,31 +315,49 @@ def delete_despesa(despesa_id, user_id):
     _execute_query("DELETE FROM despesas WHERE despesa_id = %s AND user_id = %s", (despesa_id, user_id), commit=True)
     st.cache_data.clear()
 
-# -------- Funções de Lote para Importação --------
-def batch_insert_receitas(user_id, dados_receitas):
-    """Insere uma lista de receitas em uma única transação."""
-    if not dados_receitas: return
-    dados_com_user_id = [(user_id,) + tupla for tupla in dados_receitas]
-    _execute_query("INSERT INTO receitas (user_id, conta_id, data, valor, categoria, descricao) VALUES %s",
-                   executemany_params=dados_com_user_id, commit=True)
-    st.cache_data.clear()
 
-def batch_insert_despesas(user_id, dados_despesas):
-    """Insere uma lista de despesas em uma única transação."""
-    if not dados_despesas: return
-    dados_com_user_id = [(user_id,) + tupla for tupla in dados_despesas]
-    _execute_query("INSERT INTO despesas (user_id, conta_id, data_compra, data_vencimento, valor, categoria, tipo_pagamento, parcelas, descricao, parcela_grupo_id) VALUES %s",
-                   executemany_params=dados_com_user_id, commit=True)
-    st.cache_data.clear()
+# -------- INVESTIMENTOS --------
+@st.cache_data
+def get_portfolio_consolidado(user_id):
+    """Busca o portfólio consolidado do usuário."""
+    query = """
+        SELECT
+            i.investimento_id, i.codigo, i.descricao, ti.nome as tipo,
+            SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) as quantidade_total,
+            SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade * t.preco_unitario ELSE 0 END) / NULLIF(SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE 0 END), 0) as preco_medio_compra,
+            i.indexador, i.taxa_percentual, i.data_vencimento
+        FROM investimentos i
+        INNER JOIN transacoes_investimento t ON i.investimento_id = t.investimento_id
+        JOIN tipos_investimento ti ON i.tipo_id = ti.tipo_id
+        WHERE i.user_id = %s
+        GROUP BY i.investimento_id, i.codigo, i.descricao, ti.nome
+        HAVING SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) > 0.00000001
+        ORDER BY i.codigo
+    """
+    return _execute_query(query, (user_id,), fetch='all')
 
-def batch_insert_transacoes_investimento(dados_transacoes):
-    """Insere uma lista de transações de investimento."""
-    if not dados_transacoes: return
-    _execute_query("INSERT INTO transacoes_investimento (investimento_id, tipo_transacao, data, quantidade, preco_unitario) VALUES %s",
-                   executemany_params=dados_transacoes, commit=True)
-    st.cache_data.clear()
+@st.cache_data
+def get_transacoes_por_investimento_id(investimento_id):
+    """Busca transações por ID de investimento."""
+    query = "SELECT data, quantidade, preco_unitario FROM transacoes_investimento WHERE investimento_id = %s AND tipo_transacao = 'compra' ORDER BY data"
+    return _execute_query(query, (investimento_id,), fetch='all')
+
+@st.cache_data
+def get_investimentos_usuario(user_id):
+    """Busca todos os investimentos (código e ID) de um usuário."""
+    return _execute_query("SELECT investimento_id, codigo FROM investimentos WHERE user_id = %s ORDER BY codigo", (user_id,), fetch='all')
+
+@st.cache_data
+def get_all_transacoes(user_id):
+    """Busca todas as transações de investimento de um usuário."""
+    query = "SELECT t.transacao_id, i.codigo, t.tipo_transacao, t.data, t.quantidade, t.preco_unitario FROM transacoes_investimento t JOIN investimentos i ON t.investimento_id = i.investimento_id WHERE i.user_id = %s ORDER BY t.data DESC"
+    return _execute_query(query, (user_id,), fetch='all')
     
-# -------- Funções de Investimentos --------
+@st.cache_data
+def get_tipos_investimento():
+    """Busca todos os tipos de investimento disponíveis."""
+    return _execute_query("SELECT tipo_id, nome FROM tipos_investimento ORDER BY nome", fetch='all')
+
 @st.cache_data
 def get_all_ativos_usuario(user_id):
     """Busca todos os ativos cadastrados por um usuário."""
@@ -369,78 +391,12 @@ def add_transacao_investimento(investimento_id, tipo_transacao, data, quantidade
     _execute_query(query, (investimento_id, tipo_transacao, data, quantidade, preco_unitario), commit=True)
     st.cache_data.clear()
 
-def update_ativo(investimento_id, user_id, descricao, indexador, taxa_percentual, data_vencimento):
-    """Atualiza os dados de um ativo."""
-    data_vencimento_str = data_vencimento.isoformat() if data_vencimento else None
-    query = "UPDATE investimentos SET descricao = %s, indexador = %s, taxa_percentual = %s, data_vencimento = %s WHERE investimento_id = %s AND user_id = %s"
-    params = (descricao, indexador, taxa_percentual, data_vencimento_str, investimento_id, user_id)
-    _execute_query(query, params, commit=True)
+def update_transacao_investimento(transacao_id, data, quantidade, preco_unitario):
+    """Atualiza uma transação de investimento."""
+    query = "UPDATE transacoes_investimento SET data = %s, quantidade = %s, preco_unitario = %s WHERE transacao_id = %s"
+    _execute_query(query, (data, quantidade, preco_unitario, transacao_id), commit=True)
     st.cache_data.clear()
 
-def delete_ativo(investimento_id, user_id):
-    """Deleta um ativo. Depende da regra ON DELETE CASCADE no DB."""
-    _execute_query("DELETE FROM investimentos WHERE investimento_id = %s AND user_id = %s", (investimento_id, user_id), commit=True)
-    st.cache_data.clear()
-    
-# --- Funções para Módulo de Opções ---
-def add_estrategia_opcoes(user_id, ativo_objeto, nome_estrategia, data_montagem, pernas):
-    """Adiciona uma estratégia de opções completa."""
-    custo_total = sum(p['preco_pago'] * p['quantidade'] for p in pernas)
-    conn = _get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("INSERT INTO estrategias_opcoes (user_id, ativo_objeto, nome_estrategia, data_montagem, custo_montagem) VALUES (%s, %s, %s, %s, %s) RETURNING estrategia_id",
-                        (user_id, ativo_objeto, nome_estrategia, data_montagem, custo_total))
-            estrategia_id = cur.fetchone()[0]
-            
-            dados_pernas = [(estrategia_id, p['codigo_opcao'], p['tipo_opcao'], p['tipo_operacao'], p['quantidade'], p['strike'], p['preco_pago'], p['data_vencimento']) for p in pernas]
-            
-            psycopg2.extras.execute_values(cur, "INSERT INTO pernas_estrategia (estrategia_id, codigo_opcao, tipo_opcao, tipo_operacao, quantidade, strike, preco_pago, data_vencimento) VALUES %s", dados_pernas)
-            
-            conn.commit()
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
-    st.cache_data.clear()
-
-@st.cache_data
-def get_estrategias_com_pernas(user_id):
-    """Busca todas as estratégias e suas pernas."""
-    query_estrategias = "SELECT estrategia_id, ativo_objeto, nome_estrategia, data_montagem, status, custo_montagem FROM estrategias_opcoes WHERE user_id = %s ORDER BY data_montagem DESC"
-    estrategias = _execute_query(query_estrategias, (user_id,), fetch='all')
-
-    if not estrategias: return {}
-
-    query_pernas = "SELECT p.estrategia_id, p.codigo_opcao, p.tipo_opcao, p.tipo_operacao, p.quantidade, p.strike, p.preco_pago, p.data_vencimento FROM pernas_estrategia p JOIN estrategias_opcoes e ON p.estrategia_id = e.estrategia_id WHERE e.user_id = %s"
-    pernas = _execute_query(query_pernas, (user_id,), fetch='all')
-    df_pernas = pd.DataFrame(pernas, columns=['estrategia_id', 'codigo_opcao', 'tipo_opcao', 'tipo_operacao', 'quantidade', 'strike', 'preco_pago', 'data_vencimento'])
-
-    resultado = {}
-    for e in estrategias:
-        estrategia_id = e[0]
-        resultado[estrategia_id] = {'info': e, 'pernas': df_pernas[df_pernas['estrategia_id'] == estrategia_id].to_dict('records')}
-        
-    return resultado
-
-# --- Demais Funções ---
-@st.cache_data
-def get_orcamentos(user_id):
-    return _execute_query("SELECT categoria_nome, limite_mensal FROM orcamentos WHERE user_id = %s", (user_id,), fetch='all')
-
-def set_orcamento(user_id, categoria_nome, limite):
-    query = """
-        INSERT INTO orcamentos (user_id, categoria_nome, limite_mensal) VALUES (%s, %s, %s)
-        ON CONFLICT (user_id, categoria_nome) DO UPDATE SET limite_mensal = EXCLUDED.limite_mensal;
-    """
-    _execute_query(query, (user_id, categoria_nome, float(limite)), commit=True)
-    st.cache_data.clear()
-    
-@st.cache_data
-def get_fatura_cartao(user_id, conta_id, mes, ano):
-    mes_ano_str = f"{ano:04d}-{mes:02d}"
-    query = "SELECT data_compra, descricao, valor FROM despesas WHERE user_id = %s AND conta_id = %s AND tipo_pagamento = 'crédito' AND TO_CHAR(data_vencimento, 'YYYY-MM') = %s ORDER BY data_compra"
-    return _execute_query(query, (user_id, conta_id, mes_ano_str), fetch='all')
-
-# E qualquer outra função que você tenha adicionado e que eu possa ter perdido...
+def delete_transacao_investimento(transacao_id):
+    """Deleta uma transação de investimento."""
+    _execute_query(# E qualquer outra função que você tenha adicionado e que eu possa ter perdido...
