@@ -26,23 +26,7 @@ def check_authentication():
     Verifica se o usuário está logado. Se não, para a execução.
     Se sim, retorna o perfil e o user_id.
     """
-    # Lógica para usuário LOGADO
-    credentials = database.get_authenticator_credentials()
 
-    # --- INÍCIO DO CÓDIGO DE DIAGNÓSTICO --- ### DEBUG ###
-    st.write("--- MODO DE DIAGNÓSTICO ATIVADO ---")
-    st.write("Verificando credenciais antes de autenticar:")
-    problem_found = False
-    if 'usernames' in credentials:
-        for username_key, user_info in credentials['usernames'].items():
-            if username_key is None:
-                st.error(f"!!! PROBLEMA ENCONTRADO !!! Usuário com 'username' NULO. Detalhes: {user_info}")
-                problem_found = True
-    if not problem_found:
-        st.success("Nenhum username nulo encontrado na verificação inicial.")
-    st.json(credentials) # Exibe a estrutura completa das credenciais
-    st.write("--- FIM DO MODO DE DIAGNÓSTICO ---")
-    # --- FIM DO CÓDIGO DE DIAGNÓSTICO --- ### DEBUG ###
 
     authenticator = stauth.Authenticate(
         credentials, 
