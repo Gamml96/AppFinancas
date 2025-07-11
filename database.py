@@ -56,7 +56,7 @@ def _execute_query(query, params=None, fetch=None, commit=False, executemany_par
     finally:
         conn.close()
     
-    return result, status_message
+    return result
 
 
 # --- NOVAS FUNÇÕES DE INSERÇÃO EM LOTE ---
