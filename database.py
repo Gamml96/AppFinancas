@@ -162,8 +162,21 @@ def get_user_profile(username):
 
 @st.cache_data
 def get_authenticator_credentials():
+    """
+    Busca as credenciais dos usuários no formato esperado pelo streamlit-authenticator,
+    ignorando com segurança qualquer usuário que tenha um username nulo.
+    """
     users = _execute_query("SELECT username, name, password FROM users", fetch='all')
-    return {"usernames": {u[0]: {"name": u[1], "password": u[2]} for u in users}}
+    
+    # Filtra usuários com username nulo para evitar erros
+    valid_users = [u for u in users if u[0] is not None]
+    
+    credentials = {
+        "usernames": {
+            u[0]: {"name": u[1], "password": u[2]} for u in valid_users
+        }
+    }
+    return credentials
 
 def update_user_password(username, new_password):
     hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
