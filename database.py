@@ -27,16 +27,20 @@ def _get_db_connection():
 # --- FUNÇÃO CENTRAL DE EXECUÇÃO DE QUERIES ---
 def _execute_query(query, params=None, fetch=None, commit=False, executemany_params=None):
     """
-    Executa uma query no banco de dados de forma segura e centralizada.
+    Executa uma query e retorna tanto o resultado quanto a mensagem de status do cursor.
     """
     conn = _get_db_connection()
     result = None
+    status_message = ""
     try:
         with conn.cursor() as cur:
             if executemany_params:
                 psycopg2.extras.execute_values(cur, query, executemany_params)
             else:
                 cur.execute(query, params)
+            
+            # Captura a mensagem de status (ex: "DELETE 1", "UPDATE 5")
+            status_message = cur.statusmessage
 
             if fetch == 'one':
                 result = cur.fetchone()
@@ -46,13 +50,13 @@ def _execute_query(query, params=None, fetch=None, commit=False, executemany_par
             if commit:
                 conn.commit()
     except Exception as e:
-        st.error(f"Erro de banco de dados: {e}")
-        # Em caso de erro, desfaz a transação
         conn.rollback()
+        # Propaga o erro para a interface poder tratar
+        raise e
     finally:
         conn.close()
     
-    return result
+    return result, status_message
 
 
 # --- NOVAS FUNÇÕES DE INSERÇÃO EM LOTE ---
@@ -530,15 +534,25 @@ def update_ativo(investimento_id, user_id, descricao, indexador, taxa_percentual
 
 def delete_ativo(investimento_id, user_id):
     """
-    Exclui um ativo e todas as suas transações associadas.
+    Exclui um ativo e retorna True se o banco confirmar a exclusão de 1 linha.
     """
     query = "DELETE FROM investimentos WHERE investimento_id = %s AND user_id = %s"
     
-    # --- A CORREÇÃO ESTÁ AQUI ---
-    # Adicionamos commit=True para garantir que a exclusão seja salva permanentemente.
-    _execute_query(query, (investimento_id, user_id), commit=True)
-    
-    st.cache_data.clear()
+    try:
+        # A função _execute_query agora retorna o status
+        _, status = _execute_query(query, (investimento_id, user_id), commit=True)
+        st.cache_data.clear()
+        
+        # Verifica se o banco de dados confirmou que exatamente 1 linha foi deletada
+        if status == "DELETE 1":
+            return True
+        else:
+            # Aconteceu algo inesperado: o comando rodou sem erro, mas nada foi deletado
+            return False
+            
+    except Exception as e:
+        # Se houver um erro de banco (como violação de chave estrangeira), ele será levantado aqui
+        raise e
 
 
 
