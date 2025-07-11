@@ -270,24 +270,25 @@ with tab_ativos:
                 st.rerun()
 
         if col_delete.button("Excluir Ativos Selecionados", type="primary"):
-                    # CORREÇÃO: Usamos o 'edited_df' diretamente, que já é um DataFrame.
-                    # Não tentamos reconstruir um do st.session_state.
-                    
                     selected_to_delete = edited_df[edited_df["Excluir"] == True]
                     
                     if not selected_to_delete.empty:
+                        ids_para_deletar = selected_to_delete["ID"].tolist()
+                        
+                        # Vamos tentar deletar e capturar QUALQUER erro que o banco retornar
                         try:
-                            for _, row in selected_to_delete.iterrows():
-                                database.delete_ativo(int(row["ID"]), user_id)
+                            # Itera sobre os IDs e chama a função de deleção para cada um
+                            for ativo_id in ids_para_deletar:
+                                database.delete_ativo(int(ativo_id), user_id)
                             
-                            st.success(f"{len(selected_to_delete)} ativo(s) excluído(s) com sucesso!")
+                            # A mensagem de sucesso só aparecerá se NENHUM erro ocorrer
+                            st.success(f"{len(ids_para_deletar)} ativo(s) foram marcados para exclusão e a operação foi enviada ao banco.")
                             st.rerun()
 
                         except Exception as e:
-                            # Captura o erro da restrição de chave estrangeira que discutimos
-                            if "foreign key constraint" in str(e).lower():
-                                st.error("Erro: Não é possível excluir o ativo pois ele possui transações registradas. Exclua primeiro as transações associadas.")
-                            else:
-                                st.error(f"Ocorreu um erro inesperado: {e}")
+                            # --- PONTO MAIS IMPORTANTE ---
+                            # Se o banco de dados retornar qualquer erro, ele será exibido aqui.
+                            st.error("O banco de dados recusou a exclusão. Erro retornado:")
+                            st.exception(e) # Exibe o traceback completo do erro para diagnóstico
                     else:
                         st.info("Nenhum ativo selecionado para exclusão.")
