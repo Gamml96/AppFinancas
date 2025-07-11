@@ -270,15 +270,24 @@ with tab_ativos:
                 st.rerun()
 
         if col_delete.button("Excluir Ativos Selecionados", type="primary"):
-            # Acessamos o estado editado para garantir que pegamos a marcação mais recente
-            if "editor_ativos" in st.session_state:
-                df_para_deletar = pd.DataFrame(st.session_state["editor_ativos"])
-                selected_to_delete = df_para_deletar[df_para_deletar["Excluir"]]
-                
-                if not selected_to_delete.empty:
-                    for _, row in selected_to_delete.iterrows():
-                        database.delete_ativo(int(row["ID"]), user_id)
-                    st.success(f"{len(selected_to_delete)} ativo(s) excluído(s)!")
-                    st.rerun()
-                else:
-                    st.info("Nenhum ativo selecionado para exclusão.")
+                    # CORREÇÃO: Usamos o 'edited_df' diretamente, que já é um DataFrame.
+                    # Não tentamos reconstruir um do st.session_state.
+                    
+                    selected_to_delete = edited_df[edited_df["Excluir"] == True]
+                    
+                    if not selected_to_delete.empty:
+                        try:
+                            for _, row in selected_to_delete.iterrows():
+                                database.delete_ativo(int(row["ID"]), user_id)
+                            
+                            st.success(f"{len(selected_to_delete)} ativo(s) excluído(s) com sucesso!")
+                            st.rerun()
+
+                        except Exception as e:
+                            # Captura o erro da restrição de chave estrangeira que discutimos
+                            if "foreign key constraint" in str(e).lower():
+                                st.error("Erro: Não é possível excluir o ativo pois ele possui transações registradas. Exclua primeiro as transações associadas.")
+                            else:
+                                st.error(f"Ocorreu um erro inesperado: {e}")
+                    else:
+                        st.info("Nenhum ativo selecionado para exclusão.")
