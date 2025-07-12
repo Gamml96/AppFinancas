@@ -256,22 +256,32 @@ with tab_ativos:
 
         col_save, col_delete = st.columns(2)
         if col_save.button("Salvar Alterações nos Ativos"):
-            # A lógica de salvar alterações permanece a mesma.
-            if "editor_ativos" in st.session_state:
-                dados_para_salvar = st.session_state["editor_ativos"]['edited_rows']
-                # Converta o dicionário de edições para um formato iterável
-                for index, updates in dados_para_salvar.items():
-                    ativo_original = df_ativos.iloc[index]
+            # LÓGICA DE ATUALIZAÇÃO CORRIGIDA E EFICIENTE
+            if "editor_ativos" in st.session_state and st.session_state["editor_ativos"]["edited_rows"]:
+                # 1. Pega apenas as linhas que foram realmente editadas
+                linhas_editadas = st.session_state["editor_ativos"]["edited_rows"]
+                
+                # 2. Itera sobre o dicionário de edições {índice: {coluna: valor}}
+                for index, updates in linhas_editadas.items():
+                    # Pega o ID do ativo original usando o índice da linha
+                    ativo_id = int(df_ativos.iloc[index]["ID"])
+                    
+                    # Pega a linha original para ter os valores antigos como fallback
+                    linha_original = df_ativos.iloc[index]
+
+                    # 3. Chama a função de update com os novos valores (ou os antigos se não mudou)
                     database.update_ativo(
-                        int(ativo_original["ID"]), 
-                        user_id, 
-                        updates.get("Descrição", ativo_original["Descrição"]),
-                        updates.get("Indexador", ativo_original["Indexador"]),
-                        float(updates.get("Taxa %", ativo_original["Taxa %"]) or 0),
-                        updates.get("Vencimento", ativo_original["Vencimento"])
+                        ativo_id, 
+                        user_id,
+                        updates.get("Descrição", linha_original["Descrição"]),
+                        updates.get("Indexador", linha_original["Indexador"]),
+                        float(updates.get("Taxa %", linha_original["Taxa %"]) or 0),
+                        updates.get("Vencimento", linha_original["Vencimento"])
                     )
                 st.success("Alterações nos ativos salvas com sucesso!")
                 st.rerun()
+            else:
+                st.info("Nenhuma alteração foi feita para salvar.")
 
         if col_delete.button("Excluir Ativos Selecionados", type="primary"):
             # Lógica de exclusão corrigida
