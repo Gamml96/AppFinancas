@@ -605,7 +605,8 @@ def update_ativo(investimento_id, user_id, descricao, indexador, taxa_percentual
         WHERE investimento_id = %s AND user_id = %s
     """
     params = (descricao, indexador, taxa_percentual, data_vencimento_str, investimento_id, user_id)
-    _execute_query(query, params)
+    # A CORREÇÃO CRÍTICA ESTÁ AQUI: adicionar commit=True
+    _execute_query(query, params, commit=True)
     st.cache_data.clear()
 
 def delete_ativo(investimento_id, user_id):
