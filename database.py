@@ -487,7 +487,7 @@ def add_investimento(user_id, tipo_id, codigo, descricao, indexador=None, taxa_p
         ON CONFLICT (user_id, codigo) DO NOTHING
     """
     params = (user_id, tipo_id, codigo.upper(), descricao, indexador, taxa_percentual, data_vencimento_str)
-    _execute_query(query, params)
+    _execute_query(query, params,commit=True)
     st.cache_data.clear()
 
 def get_or_create_investimento(user_id, codigo, tipo_nome, descricao="", indexador=None, taxa_percentual=None, data_vencimento=None):
