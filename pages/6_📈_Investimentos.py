@@ -256,51 +256,60 @@ with tab_ativos:
 
         col_save, col_delete = st.columns(2)
         if col_save.button("Salvar Alterações nos Ativos"):
+            # A lógica de salvar alterações permanece a mesma.
             if "editor_ativos" in st.session_state:
-                dados_para_salvar = st.session_state["editor_ativos"]
-                df_para_salvar = pd.DataFrame(dados_para_salvar)
-                
-                for _, row in df_para_salvar.iterrows():
+                dados_para_salvar = st.session_state["editor_ativos"]['edited_rows']
+                # Converta o dicionário de edições para um formato iterável
+                for index, updates in dados_para_salvar.items():
+                    ativo_original = df_ativos.iloc[index]
                     database.update_ativo(
-                        int(row["ID"]), user_id, row["Descrição"], row["Indexador"], 
-                        float(row["Taxa %"]) if row["Taxa %"] else None, 
-                        row["Vencimento"]
+                        int(ativo_original["ID"]), 
+                        user_id, 
+                        updates.get("Descrição", ativo_original["Descrição"]),
+                        updates.get("Indexador", ativo_original["Indexador"]),
+                        float(updates.get("Taxa %", ativo_original["Taxa %"]) or 0),
+                        updates.get("Vencimento", ativo_original["Vencimento"])
                     )
                 st.success("Alterações nos ativos salvas com sucesso!")
                 st.rerun()
 
         if col_delete.button("Excluir Ativos Selecionados", type="primary"):
-            selected_to_delete = edited_df[edited_df["Excluir"] == True]
-            
-            if not selected_to_delete.empty:
-                ids_para_deletar = selected_to_delete["ID"].tolist()
-                erros = []
-                sucessos = 0
+            # Lógica de exclusão corrigida
+            if "editor_ativos" in st.session_state:
+                # 1. Pega os índices das linhas marcadas para exclusão
+                indices_para_deletar = [i for i, row in st.session_state["editor_ativos"]['edited_rows'].items() if row.get('Excluir')]
                 
-                # Itera sobre os IDs e tenta deletar um por um
-                for ativo_id in ids_para_deletar:
-                    try:
-                        database.delete_ativo(int(ativo_id), user_id)
-                        sucessos += 1
-                    except Exception as e:
-                        # Se um erro ocorrer, captura o erro e o ID do ativo
-                        nome_ativo = selected_to_delete[selected_to_delete["ID"] == ativo_id]["Código"].iloc[0]
-                        erros.append(f"Ativo '{nome_ativo}': {e}")
+                if not indices_para_deletar:
+                    st.info("Nenhum ativo selecionado para exclusão.")
+                else:
+                    sucessos = 0
+                    erros = []
+                    
+                    # 2. Itera sobre os índices e tenta deletar
+                    for index in indices_para_deletar:
+                        ativo_para_deletar = df_ativos.iloc[index]
+                        ativo_id = int(ativo_para_deletar["ID"])
+                        nome_ativo = ativo_para_deletar["Código"]
+                        
+                        try:
+                            # 3. Chama a função do banco de dados
+                            database.delete_ativo(ativo_id, user_id)
+                            sucessos += 1
+                        except Exception as e:
+                            # 4. Captura o erro específico para aquele ativo
+                            erro_str = str(e)
+                            if "foreign key constraint" in erro_str.lower():
+                                erros.append(f"Ativo '{nome_ativo}': Não pôde ser excluído pois possui transações registradas.")
+                            else:
+                                erros.append(f"Ativo '{nome_ativo}': {erro_str}")
 
-                # Exibe um resumo final APÓS todas as tentativas
-                if sucessos > 0:
-                    st.success(f"{sucessos} ativo(s) excluído(s) com sucesso.")
-                
-                if erros:
-                    st.error("Alguns ativos não puderam ser excluídos:")
-                    for erro in erros:
-                        # Exibe uma mensagem mais amigável para o erro de chave estrangeira
-                        if "foreign key constraint" in erro.lower():
-                             st.warning(f"O ativo não pôde ser excluído pois possui transações registradas.")
-                        else:
-                             st.warning(erro)
-                
-                # Roda o rerun no final de tudo para atualizar a tela
-                st.rerun()
-            else:
-                st.info("Nenhum ativo selecionado para exclusão.")
+                    # 5. Exibe um resumo final
+                    if sucessos > 0:
+                        st.success(f"{sucessos} ativo(s) foram excluídos com sucesso.")
+                    if erros:
+                        st.error("Alguns ativos não puderam ser excluídos:")
+                        for erro in erros:
+                            st.warning(erro)
+                    
+                    # Roda o rerun no final para atualizar a tela
+                    st.rerun()
