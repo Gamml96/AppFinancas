@@ -609,9 +609,13 @@ def update_ativo(investimento_id, user_id, descricao, indexador, taxa_percentual
     st.cache_data.clear()
 
 def delete_ativo(investimento_id, user_id):
-    """Exclui um ativo e todas as suas transações associadas (graças ao ON DELETE CASCADE)."""
+    """Exclui um ativo. A constraint ON DELETE CASCADE no banco de dados
+       garante que as transações associadas também sejam removidas.
+    """
+    # A exceção será levantada pelo SGBD se a foreign key não tiver CASCADE
+    # e houver transações, o que será capturado na interface.
     query = "DELETE FROM investimentos WHERE investimento_id = %s AND user_id = %s"
-    _execute_query(query, (investimento_id, user_id))
+    _execute_query(query, (investimento_id, user_id), commit=True)
     st.cache_data.clear()
 
 
