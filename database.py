@@ -800,6 +800,7 @@ def add_operacao_estruturada(user_id, ativo_subjacente, nome_estrategia, data_mo
 def get_operacoes_estruturadas(user_id, status="Aberta"):
     """
     Busca todas as operações estruturadas de um usuário com um determinado status.
+    --- VERSÃO ATUALIZADA PARA INCLUIR O 'perna_id' ---
     """
     query = """
         SELECT
@@ -808,6 +809,7 @@ def get_operacoes_estruturadas(user_id, status="Aberta"):
             op.nome_estrategia,
             op.data_montagem,
             op.status,
+            p.perna_id, -- <<< ADICIONADO AQUI
             p.codigo_opcao,
             p.tipo_opcao,
             p.tipo_operacao,
@@ -865,4 +867,40 @@ def desmontar_operacao(operacao_id, data_desmontagem, pernas_saida):
     finally:
         conn.close()
     
+    st.cache_data.clear()
+
+def update_operacao_header(operacao_id, ativo_subjacente, nome_estrategia, data_montagem):
+    """Atualiza os dados principais (cabeçalho) de uma operação."""
+    query = """
+        UPDATE operacoes_estruturadas 
+        SET ativo_subjacente = %s, nome_estrategia = %s, data_montagem = %s
+        WHERE operacao_id = %s
+    """
+    _execute_query(query, (ativo_subjacente, nome_estrategia, data_montagem, operacao_id), commit=True)
+    st.cache_data.clear()
+
+def update_operacao_perna(perna_id, codigo_opcao, tipo_operacao, quantidade, preco_entrada, data_vencimento):
+    """Atualiza os detalhes de uma única perna da operação."""
+    # Determina o tipo de opção a partir do código
+    tipo_opcao = "CALL" if 'C' in codigo_opcao.upper() else "PUT"
+    query = """
+        UPDATE operacoes_pernas
+        SET codigo_opcao = %s, tipo_opcao = %s, tipo_operacao = %s, quantidade = %s, preco_entrada = %s, data_vencimento = %s
+        WHERE perna_id = %s
+    """
+    params = (codigo_opcao, tipo_opcao, tipo_operacao, quantidade, preco_entrada, data_vencimento, perna_id)
+    _execute_query(query, params, commit=True)
+    st.cache_data.clear()
+
+def delete_operacao_perna(perna_id):
+    """Exclui uma única perna de uma operação."""
+    _execute_query("DELETE FROM operacoes_pernas WHERE perna_id = %s", (perna_id,), commit=True)
+    st.cache_data.clear()
+
+def delete_operacao_inteira(operacao_id):
+    """
+    Exclui uma operação estruturada inteira. 
+    A configuração 'ON DELETE CASCADE' no banco de dados cuidará de excluir as pernas associadas.
+    """
+    _execute_query("DELETE FROM operacoes_estruturadas WHERE operacao_id = %s", (operacao_id,), commit=True)
     st.cache_data.clear()
