@@ -746,3 +746,123 @@ def get_transacoes_consolidadas(user_id, conta_id=None):
             
     conn.close()
     return transacoes
+
+# -------- Operações Estruturadas com Opções --------
+
+def add_operacao_estruturada(user_id, ativo_subjacente, nome_estrategia, data_montagem, pernas):
+    """
+    Adiciona uma nova operação estruturada e suas pernas em uma única transação.
+    'pernas' deve ser uma lista de dicionários.
+    """
+    conn = _get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # Insere a operação principal e obtém o ID
+            cur.execute(
+                """
+                INSERT INTO operacoes_estruturadas (user_id, ativo_subjacente, nome_estrategia, data_montagem, status)
+                VALUES (%s, %s, %s, %s, 'Aberta') RETURNING operacao_id
+                """,
+                (user_id, ativo_subjacente, nome_estrategia, data_montagem)
+            )
+            operacao_id = cur.fetchone()[0]
+
+            # Prepara os dados das pernas para inserção em lote
+            dados_pernas = [
+                (
+                    operacao_id, p['codigo_opcao'], p['tipo_opcao'], p['tipo_operacao'],
+                    p['quantidade'], p['preco_entrada'], p['data_vencimento']
+                )
+                for p in pernas
+            ]
+
+            # Insere todas as pernas de uma vez
+            psycopg2.extras.execute_values(
+                cur,
+                """
+                INSERT INTO operacoes_pernas 
+                (operacao_id, codigo_opcao, tipo_opcao, tipo_operacao, quantidade, preco_entrada, data_vencimento) 
+                VALUES %s
+                """,
+                dados_pernas
+            )
+            
+            conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e  # Propaga o erro para a interface mostrar ao usuário
+    finally:
+        conn.close()
+    
+    st.cache_data.clear()
+
+@st.cache_data
+def get_operacoes_estruturadas(user_id, status="Aberta"):
+    """
+    Busca todas as operações estruturadas de um usuário com um determinado status.
+    """
+    query = """
+        SELECT
+            op.operacao_id,
+            op.ativo_subjacente,
+            op.nome_estrategia,
+            op.data_montagem,
+            op.status,
+            p.codigo_opcao,
+            p.tipo_opcao,
+            p.tipo_operacao,
+            p.quantidade,
+            p.preco_entrada,
+            p.data_vencimento
+        FROM operacoes_estruturadas op
+        JOIN operacoes_pernas p ON op.operacao_id = p.operacao_id
+        WHERE op.user_id = %s AND op.status = %s
+        ORDER BY op.data_montagem DESC, op.operacao_id, p.perna_id
+    """
+    return _execute_query(query, (user_id, status), fetch='all')
+
+def desmontar_operacao(operacao_id, data_desmontagem, pernas_saida):
+    """
+    Atualiza os preços de saída das pernas, fecha a operação e calcula o resultado.
+    'pernas_saida' é um dicionário {codigo_opcao: preco_saida}
+    """
+    conn = _get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            resultado_final = 0
+            
+            # Pega todas as pernas da operação para calcular o resultado
+            cur.execute("SELECT codigo_opcao, tipo_operacao, quantidade, preco_entrada FROM operacoes_pernas WHERE operacao_id = %s", (operacao_id,))
+            todas_pernas = cur.fetchall()
+            
+            for codigo, tipo_op, qtd, preco_ent in todas_pernas:
+                preco_saida = pernas_saida.get(codigo, 0.0)
+                
+                # Atualiza o preço de saída no banco
+                cur.execute(
+                    "UPDATE operacoes_pernas SET preco_saida = %s WHERE operacao_id = %s AND codigo_opcao = %s",
+                    (preco_saida, operacao_id, codigo)
+                )
+                
+                # Calcula o resultado da perna
+                if tipo_op == 'compra': # Comprou na entrada, vendeu na saída
+                    resultado_perna = (preco_saida - preco_ent) * qtd
+                else: # Vendeu na entrada, comprou na saída
+                    resultado_perna = (preco_ent - preco_saida) * qtd
+                
+                resultado_final += resultado_perna
+
+            # Atualiza a operação principal com o resultado e a data de desmontagem
+            cur.execute(
+                "UPDATE operacoes_estruturadas SET status = 'Fechada', data_desmontagem = %s, resultado = %s WHERE operacao_id = %s",
+                (data_desmontagem, resultado_final, operacao_id)
+            )
+            
+            conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+    
+    st.cache_data.clear()
