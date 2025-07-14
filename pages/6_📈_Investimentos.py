@@ -334,40 +334,39 @@ with tab_operacoes:
 
     # --- SEÇÃO PARA ADICIONAR PERNAS (FORA DO FORMULÁRIO) ---
     st.markdown("##### 1. Adicione as Pernas da Operação")
-    col_perna1, col_perna2, col_perna3, col_perna4, col_perna5 = st.columns(5)
+    col_perna1, col_perna2, col_perna3, col_perna4, col_perna5, col_perna6 = st.columns(6)
     with col_perna1:
         codigo_opcao = st.text_input("Código da Opção", key="codigo_opcao")
     with col_perna2:
-        tipo_operacao = st.selectbox("Operação", ["compra", "venda"], key="tipo_operacao")
+        strike_perna = st.number_input("Strike (R$)", min_value=0.0, format="%.2f", key="strike_perna")
     with col_perna3:
-        quantidade_perna = st.number_input("Quantidade", min_value=1, step=1, key="qtd_perna")
+        tipo_operacao = st.selectbox("Operação", ["compra", "venda"], key="tipo_operacao")
     with col_perna4:
-        preco_entrada = st.number_input("Preço de Entrada (R$)", min_value=0.0, format="%.2f", key="preco_entrada")
+        quantidade_perna = st.number_input("Quantidade", min_value=1, step=1, key="qtd_perna")
     with col_perna5:
+        preco_entrada = st.number_input("Preço Entrada (R$)", min_value=0.0, format="%.2f", key="preco_entrada")
+    with col_perna6:
         data_vencimento = st.date_input("Vencimento", value=utils.get_local_today() + relativedelta(months=1), key="venc_perna")
-    
-    # O botão agora funciona corretamente fora do formulário
+
     if st.button("Adicionar Perna à Lista"):
-        if codigo_opcao and quantidade_perna > 0 and preco_entrada > 0:
+        if codigo_opcao and strike_perna > 0 and quantidade_perna > 0:
             st.session_state.pernas_operacao.append({
                 "codigo_opcao": codigo_opcao.upper(),
                 "tipo_opcao": "CALL" if 'C' in codigo_opcao.upper() else "PUT",
+                "strike": strike_perna,
                 "tipo_operacao": tipo_operacao,
                 "quantidade": quantidade_perna,
                 "preco_entrada": preco_entrada,
                 "data_vencimento": data_vencimento
             })
-            # Limpa os campos de input após adicionar
-            st.rerun() 
+            st.rerun()
         else:
-            st.warning("Preencha todos os campos da perna.")
+            st.warning("Preencha todos os campos da perna, incluindo o Strike.")
 
     # --- FORMULÁRIO PARA SALVAR A OPERAÇÃO COMPLETA ---
     st.markdown("---")
     st.markdown("##### 2. Salve a Estratégia Completa")
     with st.form("form_nova_operacao"):
-        
-        # Exibe as pernas que já foram adicionadas à lista
         if st.session_state.pernas_operacao:
             st.markdown("###### Pernas a serem registradas:")
             df_pernas = pd.DataFrame(st.session_state.pernas_operacao)
@@ -376,15 +375,14 @@ with tab_operacoes:
             st.info("Nenhuma perna adicionada à operação ainda.")
 
         st.markdown("###### Detalhes da Estratégia")
-        col1, col2, col3 = st.columns(3)
-        with col1:
+        c1, c2, c3 = st.columns(3)
+        with c1:
             ativo_subjacente = st.text_input("Ativo Subjacente (ex: PETR4)")
-        with col2:
-            nome_estrategia = st.text_input("Nome da Estratégia (ex: Trava de Alta com Call)")
-        with col3:
+        with c2:
+            nome_estrategia = st.text_input("Nome da Estratégia (ex: Trava de Alta)")
+        with c3:
             data_montagem = st.date_input("Data de Montagem", value=utils.get_local_today())
 
-        # O único botão dentro do formulário é o de submissão
         submitted = st.form_submit_button("Salvar Operação Estruturada", type="primary")
         if submitted:
             if not ativo_subjacente or not nome_estrategia or not st.session_state.pernas_operacao:
@@ -393,112 +391,108 @@ with tab_operacoes:
                 try:
                     database.add_operacao_estruturada(user_id, ativo_subjacente.upper(), nome_estrategia, data_montagem.isoformat(), st.session_state.pernas_operacao)
                     st.success("Operação estruturada salva com sucesso!")
-                    # Limpa a lista de pernas após o sucesso
                     st.session_state.pernas_operacao = []
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao salvar a operação: {e}")
-                    
+
     # --- VISUALIZAÇÃO E GERENCIAMENTO DAS OPERAÇÕES EM ABERTO ---
-st.markdown("---")
-st.markdown("### Operações em Aberto")
+    st.markdown("---")
+    st.markdown("### Operações em Aberto")
+    operacoes_abertas = database.get_operacoes_estruturadas(user_id, "Aberta")
 
-# Atualizamos a busca para pegar o novo campo 'perna_id'
-operacoes_abertas = database.get_operacoes_estruturadas(user_id, "Aberta")
+    if not operacoes_abertas:
+        st.info("Nenhuma operação estruturada em aberto.")
+    else:
+        df_ops = pd.DataFrame(operacoes_abertas, columns=['ID', 'Ativo', 'Estratégia', 'Data Montagem', 'Status', 'Perna ID', 'Código Opção', 'Tipo', 'C/V', 'Strike', 'Qtd', 'Preço Entrada', 'Vencimento'])
+        for operacao_id, group in df_ops.groupby('ID'):
+            info = group.iloc[0]
+            custo_montagem = (group.apply(lambda row: row['Preço Entrada'] * row['Qtd'] if row['C/V'] == 'compra' else -row['Preço Entrada'] * row['Qtd'], axis=1)).sum()
 
-if not operacoes_abertas:
-    st.info("Nenhuma operação estruturada em aberto.")
-else:
-    # A nova lista de colunas reflete a query atualizada
-    df_ops = pd.DataFrame(operacoes_abertas, columns=['ID', 'Ativo', 'Estratégia', 'Data Montagem', 'Status', 'Perna ID', 'Código Opção', 'Tipo', 'C/V', 'Qtd', 'Preço Entrada', 'Vencimento'])
-    
-    # Agrupa por operação para exibir em expanders
-    for operacao_id, group in df_ops.groupby('ID'):
-        info = group.iloc[0]
-        custo_montagem = (group.apply(lambda row: row['Preço Entrada'] * row['Qtd'] if row['C/V'] == 'compra' else -row['Preço Entrada'] * row['Qtd'], axis=1)).sum()
+            with st.expander(f"**{info['Estratégia']} em {info['Ativo']}** (Montada em: {info['Data Montagem'].strftime('%d/%m/%Y')})"):
+                with st.form(key=f"form_edit_{operacao_id}"):
+                    st.markdown("##### Editar Operação")
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        novo_ativo = st.text_input("Ativo Subjacente", value=info['Ativo'], key=f"ativo_{operacao_id}")
+                    with c2:
+                        nova_estrategia = st.text_input("Nome da Estratégia", value=info['Estratégia'], key=f"estr_{operacao_id}")
+                    with c3:
+                        nova_data = st.date_input("Data de Montagem", value=info['Data Montagem'], key=f"data_{operacao_id}")
 
-        with st.expander(f"**{info['Estratégia']} em {info['Ativo']}** (Montada em: {info['Data Montagem'].strftime('%d/%m/%Y')})"):
-            
-            # --- SEÇÃO DE EDIÇÃO DA OPERAÇÃO ---
-            with st.form(key=f"form_edit_{operacao_id}"):
-                st.markdown("##### Editar Operação")
-                
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    novo_ativo = st.text_input("Ativo Subjacente", value=info['Ativo'], key=f"ativo_{operacao_id}")
-                with c2:
-                    nova_estrategia = st.text_input("Nome da Estratégia", value=info['Estratégia'], key=f"estr_{operacao_id}")
-                with c3:
-                    nova_data = st.date_input("Data de Montagem", value=info['Data Montagem'], key=f"data_{operacao_id}")
-                
-                # --- Editor de Pernas ---
-                st.markdown("###### Editar Pernas")
-                # Prepara o DF para edição, adicionando a coluna 'Excluir'
-                df_edit_pernas = group[['Perna ID', 'Código Opção', 'C/V', 'Qtd', 'Preço Entrada', 'Vencimento']].copy()
-                df_edit_pernas['Excluir'] = False
-                
-                edited_df = st.data_editor(
-                    df_edit_pernas,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Perna ID": None, # Oculta o ID
-                        "Código Opção": st.column_config.TextColumn("Código", required=True),
-                        "C/V": st.column_config.SelectboxColumn("C/V", options=["compra", "venda"], required=True),
-                        "Qtd": st.column_config.NumberColumn("Qtd", min_value=1, required=True),
-                        "Preço Entrada": st.column_config.NumberColumn("Preço Entrada", format="R$ %.2f", required=True),
-                        "Vencimento": st.column_config.DateColumn("Vencimento", required=True),
-                        "Excluir": st.column_config.CheckboxColumn("Excluir?", default=False)
-                    },
-                    key=f"editor_pernas_{operacao_id}"
-                )
+                    st.markdown("###### Editar Pernas")
+                    df_edit_pernas = group[['Perna ID', 'Código Opção', 'C/V', 'Strike', 'Qtd', 'Preço Entrada', 'Vencimento']].copy()
+                    df_edit_pernas['Excluir'] = False
+                    edited_df = st.data_editor(
+                        df_edit_pernas, use_container_width=True, hide_index=True,
+                        column_config={
+                            "Perna ID": None, "Código Opção": st.column_config.TextColumn("Código", required=True),
+                            "C/V": st.column_config.SelectboxColumn("C/V", options=["compra", "venda"], required=True),
+                            "Strike": st.column_config.NumberColumn("Strike", format="R$ %.2f", required=True),
+                            "Qtd": st.column_config.NumberColumn("Qtd", min_value=1, required=True),
+                            "Preço Entrada": st.column_config.NumberColumn("Preço Entrada", format="R$ %.2f", required=True),
+                            "Vencimento": st.column_config.DateColumn("Vencimento", required=True),
+                            "Excluir": st.column_config.CheckboxColumn("Excluir?", default=False)
+                        }, key=f"editor_pernas_{operacao_id}"
+                    )
+                    
+                    col_save, col_delete_op = st.columns([4, 1.1])
+                    with col_save:
+                        if st.form_submit_button("Salvar Alterações na Operação", type="primary"):
+                            database.update_operacao_header(operacao_id, novo_ativo.upper(), nova_estrategia, nova_data.isoformat())
+                            for _, row in edited_df.iterrows():
+                                perna_id = row['Perna ID']
+                                if row['Excluir']:
+                                    database.delete_operacao_perna(perna_id)
+                                else:
+                                    database.update_operacao_perna(perna_id, row['Código Opção'], row['C/V'], row['Strike'], row['Qtd'], row['Preço Entrada'], row['Vencimento'])
+                            st.success(f"Operação '{nova_estrategia}' atualizada com sucesso!")
+                            st.rerun()
+                    with col_delete_op:
+                        if st.form_submit_button("Excluir Tudo"):
+                            database.delete_operacao_inteira(operacao_id)
+                            st.warning(f"Operação '{info['Estratégia']}' foi excluída permanentemente.")
+                            st.rerun()
 
-                # --- Botões de Ação ---
-                col_save, col_delete_op = st.columns([4, 1.1])
-                
-                with col_save:
-                    if st.form_submit_button("Salvar Alterações na Operação", type="primary"):
-                        # 1. Salva alterações no cabeçalho
-                        database.update_operacao_header(operacao_id, novo_ativo.upper(), nova_estrategia, nova_data.isoformat())
-
-                        # 2. Itera sobre as pernas editadas
-                        for _, row in edited_df.iterrows():
-                            perna_id = row['Perna ID']
-                            if row['Excluir']:
-                                # Deleta a perna se marcada
-                                database.delete_operacao_perna(perna_id)
-                            else:
-                                # Atualiza os dados da perna
-                                database.update_operacao_perna(
-                                    perna_id, row['Código Opção'], row['C/V'], 
-                                    row['Qtd'], row['Preço Entrada'], row['Vencimento']
-                                )
-                        
-                        st.success(f"Operação '{nova_estrategia}' atualizada com sucesso!")
+                st.markdown("---")
+                st.markdown("##### Desmontar Operação")
+                st.metric("Custo de Montagem", utils.formatar_moeda_brl(custo_montagem))
+                pernas_saida = {}
+                for _, perna in group.iterrows():
+                    codigo = perna['Código Opção']
+                    pernas_saida[codigo] = st.number_input(f"Preço de Saída para {codigo}", min_value=0.0, format="%.2f", key=f"saida_{operacao_id}_{codigo}")
+                if st.button("Confirmar Desmontagem", key=f"desmontar_{operacao_id}"):
+                    try:
+                        database.desmontar_operacao(operacao_id, utils.get_local_today().isoformat(), pernas_saida)
+                        st.success(f"Operação {info['Estratégia']} fechada com sucesso!")
                         st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao desmontar operação: {e}")
 
-                with col_delete_op:
-                    # Botão para deletar a operação inteira (fora do form de edição, mas dentro do expander)
-                    if st.form_submit_button("Excluir Tudo"):
-                        database.delete_operacao_inteira(operacao_id)
-                        st.warning(f"Operação '{info['Estratégia']}' foi excluída permanentemente.")
-                        st.rerun()
+    # --- HISTÓRICO DE OPERAÇÕES FINALIZADAS ---
+    st.markdown("---")
+    st.markdown("### Histórico de Operações Finalizadas")
+    operacoes_finalizadas = database.get_operacoes_finalizadas(user_id)
 
+    if not operacoes_finalizadas:
+        st.info("Nenhuma operação finalizada encontrada.")
+    else:
+        df_finalizadas = pd.DataFrame(operacoes_finalizadas, columns=['ID', 'Ativo', 'Estratégia', 'Data Montagem', 'Data Finalização', 'Status', 'Resultado R$', 'Strike', 'Qtd'])
+        for operacao_id, group in df_finalizadas.groupby('ID'):
+            info = group.iloc[0]
+            resultado_reais = info['Resultado R$']
+            valor_nocional = (group['Strike'] * group['Qtd']).sum()
+            resultado_percentual = (resultado_reais / valor_nocional * 100) if valor_nocional > 0 else 0
 
-            st.markdown("---")
-            # --- SEÇÃO DE DESMONTAGEM (JÁ EXISTENTE) ---
-            st.markdown("##### Desmontar Operação")
-            st.metric("Custo de Montagem", utils.formatar_moeda_brl(custo_montagem))
-
-            pernas_saida = {}
-            for _, perna in group.iterrows():
-                codigo = perna['Código Opção']
-                pernas_saida[codigo] = st.number_input(f"Preço de Saída para {codigo}", min_value=0.0, format="%.2f", key=f"saida_{operacao_id}_{codigo}")
-            
-            if st.button("Confirmar Desmontagem", key=f"desmontar_{operacao_id}"):
-                try:
-                    database.desmontar_operacao(operacao_id, utils.get_local_today().isoformat(), pernas_saida)
-                    st.success(f"Operação {info['Estratégia']} fechada com sucesso!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao desmontar operação: {e}")
+            expander_title = f"**{info['Estratégia']} em {info['Ativo']}** (Finalizada em: {info['Data Finalização'].strftime('%d/%m/%Y')})"
+            with st.expander(expander_title):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Resultado Financeiro", f"R$ {resultado_reais:,.2f}")
+                with col2:
+                    st.metric("Resultado Percentual", f"{resultado_percentual:.2f}%")
+                with col3:
+                    st.metric("Valor Nocional (Aprox.)", f"R$ {valor_nocional:,.2f}")
+                st.markdown(f"Status final: **{info['Status']}**")
+                st.markdown("###### Pernas da Operação:")
+                st.dataframe(group[['Strike', 'Qtd']], use_container_width=True, hide_index=True)

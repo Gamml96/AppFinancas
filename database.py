@@ -753,46 +753,37 @@ def add_operacao_estruturada(user_id, ativo_subjacente, nome_estrategia, data_mo
     """
     Adiciona uma nova operação estruturada e suas pernas em uma única transação.
     'pernas' deve ser uma lista de dicionários.
+    --- VERSÃO ATUALIZADA PARA INCLUIR STRIKE ---
     """
     conn = _get_db_connection()
     try:
         with conn.cursor() as cur:
-            # Insere a operação principal e obtém o ID
             cur.execute(
-                """
-                INSERT INTO operacoes_estruturadas (user_id, ativo_subjacente, nome_estrategia, data_montagem, status)
-                VALUES (%s, %s, %s, %s, 'Aberta') RETURNING operacao_id
-                """,
+                "INSERT INTO operacoes_estruturadas (user_id, ativo_subjacente, nome_estrategia, data_montagem, status) VALUES (%s, %s, %s, %s, 'Aberta') RETURNING operacao_id",
                 (user_id, ativo_subjacente, nome_estrategia, data_montagem)
             )
             operacao_id = cur.fetchone()[0]
 
-            # Prepara os dados das pernas para inserção em lote
             dados_pernas = [
                 (
                     operacao_id, p['codigo_opcao'], p['tipo_opcao'], p['tipo_operacao'],
-                    p['quantidade'], p['preco_entrada'], p['data_vencimento']
+                    p['strike'], p['quantidade'], p['preco_entrada'], p['data_vencimento']
                 )
                 for p in pernas
             ]
 
-            # Insere todas as pernas de uma vez
             psycopg2.extras.execute_values(
                 cur,
-                """
-                INSERT INTO operacoes_pernas 
-                (operacao_id, codigo_opcao, tipo_opcao, tipo_operacao, quantidade, preco_entrada, data_vencimento) 
-                VALUES %s
-                """,
+                "INSERT INTO operacoes_pernas (operacao_id, codigo_opcao, tipo_opcao, tipo_operacao, strike, quantidade, preco_entrada, data_vencimento) VALUES %s",
                 dados_pernas
             )
             
             conn.commit()
     except Exception as e:
-        conn.rollback()
-        raise e  # Propaga o erro para a interface mostrar ao usuário
+        conn.rollback(); raise e
     finally:
         conn.close()
+    st.cache_data.clear()
     
     st.cache_data.clear()
 
@@ -800,22 +791,14 @@ def add_operacao_estruturada(user_id, ativo_subjacente, nome_estrategia, data_mo
 def get_operacoes_estruturadas(user_id, status="Aberta"):
     """
     Busca todas as operações estruturadas de um usuário com um determinado status.
-    --- VERSÃO ATUALIZADA PARA INCLUIR O 'perna_id' ---
+    --- VERSÃO ATUALIZADA PARA INCLUIR strike E perna_id ---
     """
     query = """
         SELECT
-            op.operacao_id,
-            op.ativo_subjacente,
-            op.nome_estrategia,
-            op.data_montagem,
-            op.status,
-            p.perna_id, -- <<< ADICIONADO AQUI
-            p.codigo_opcao,
-            p.tipo_opcao,
-            p.tipo_operacao,
-            p.quantidade,
-            p.preco_entrada,
-            p.data_vencimento
+            op.operacao_id, op.ativo_subjacente, op.nome_estrategia,
+            op.data_montagem, op.status, p.perna_id, p.codigo_opcao,
+            p.tipo_opcao, p.tipo_operacao, p.strike, p.quantidade, -- <<< STRIKE ADICIONADO AQUI
+            p.preco_entrada, p.data_vencimento
         FROM operacoes_estruturadas op
         JOIN operacoes_pernas p ON op.operacao_id = p.operacao_id
         WHERE op.user_id = %s AND op.status = %s
@@ -879,16 +862,14 @@ def update_operacao_header(operacao_id, ativo_subjacente, nome_estrategia, data_
     _execute_query(query, (ativo_subjacente, nome_estrategia, data_montagem, operacao_id), commit=True)
     st.cache_data.clear()
 
-def update_operacao_perna(perna_id, codigo_opcao, tipo_operacao, quantidade, preco_entrada, data_vencimento):
-    """Atualiza os detalhes de uma única perna da operação."""
-    # Determina o tipo de opção a partir do código
-    tipo_opcao = "CALL" if 'C' in codigo_opcao.upper() else "PUT"
-    query = """
-        UPDATE operacoes_pernas
-        SET codigo_opcao = %s, tipo_opcao = %s, tipo_operacao = %s, quantidade = %s, preco_entrada = %s, data_vencimento = %s
-        WHERE perna_id = %s
+def update_operacao_perna(perna_id, codigo_opcao, tipo_operacao, strike, quantidade, preco_entrada, data_vencimento):
     """
-    params = (codigo_opcao, tipo_opcao, tipo_operacao, quantidade, preco_entrada, data_vencimento, perna_id)
+    Atualiza os detalhes de uma única perna da operação.
+    --- VERSÃO ATUALIZADA PARA INCLUIR STRIKE ---
+    """
+    tipo_opcao = "CALL" if 'C' in codigo_opcao.upper() else "PUT"
+    query = "UPDATE operacoes_pernas SET codigo_opcao = %s, tipo_opcao = %s, tipo_operacao = %s, strike = %s, quantidade = %s, preco_entrada = %s, data_vencimento = %s WHERE perna_id = %s"
+    params = (codigo_opcao, tipo_opcao, tipo_operacao, strike, quantidade, preco_entrada, data_vencimento, perna_id)
     _execute_query(query, params, commit=True)
     st.cache_data.clear()
 
@@ -904,3 +885,28 @@ def delete_operacao_inteira(operacao_id):
     """
     _execute_query("DELETE FROM operacoes_estruturadas WHERE operacao_id = %s", (operacao_id,), commit=True)
     st.cache_data.clear()
+
+@st.cache_data
+def get_operacoes_finalizadas(user_id):
+    """
+    Busca todas as operações com status 'Fechada' ou 'Expirada'.
+    --- VERSÃO ATUALIZADA PARA INCLUIR STRIKE ---
+    """
+    query = """
+        SELECT
+            op.operacao_id,
+            op.ativo_subjacente,
+            op.nome_estrategia,
+            op.data_montagem,
+            op.data_desmontagem,
+            op.status,
+            op.resultado,
+            p.strike,
+            p.quantidade
+        FROM operacoes_estruturadas op
+        JOIN operacoes_pernas p ON op.operacao_id = p.operacao_id
+        WHERE op.user_id = %s AND op.status IN ('Fechada', 'Expirada')
+        ORDER BY op.data_desmontagem DESC, op.operacao_id
+    """
+    return _execute_query(query, (user_id,), fetch='all')
+
