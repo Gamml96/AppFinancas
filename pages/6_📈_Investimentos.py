@@ -328,12 +328,54 @@ with tab_ativos:
 with tab_operacoes:
     st.markdown("### Registrar Nova Operação Estruturada")
 
-    # Inicializa o estado para as pernas da operação
+    # Inicializa o estado para as pernas da operação se não existir
     if 'pernas_operacao' not in st.session_state:
         st.session_state.pernas_operacao = []
 
+    # --- SEÇÃO PARA ADICIONAR PERNAS (FORA DO FORMULÁRIO) ---
+    st.markdown("##### 1. Adicione as Pernas da Operação")
+    col_perna1, col_perna2, col_perna3, col_perna4, col_perna5 = st.columns(5)
+    with col_perna1:
+        codigo_opcao = st.text_input("Código da Opção", key="codigo_opcao")
+    with col_perna2:
+        tipo_operacao = st.selectbox("Operação", ["compra", "venda"], key="tipo_operacao")
+    with col_perna3:
+        quantidade_perna = st.number_input("Quantidade", min_value=1, step=1, key="qtd_perna")
+    with col_perna4:
+        preco_entrada = st.number_input("Preço de Entrada (R$)", min_value=0.0, format="%.2f", key="preco_entrada")
+    with col_perna5:
+        data_vencimento = st.date_input("Vencimento", value=utils.get_local_today() + relativedelta(months=1), key="venc_perna")
+    
+    # O botão agora funciona corretamente fora do formulário
+    if st.button("Adicionar Perna à Lista"):
+        if codigo_opcao and quantidade_perna > 0 and preco_entrada > 0:
+            st.session_state.pernas_operacao.append({
+                "codigo_opcao": codigo_opcao.upper(),
+                "tipo_opcao": "CALL" if 'C' in codigo_opcao.upper() else "PUT",
+                "tipo_operacao": tipo_operacao,
+                "quantidade": quantidade_perna,
+                "preco_entrada": preco_entrada,
+                "data_vencimento": data_vencimento
+            })
+            # Limpa os campos de input após adicionar
+            st.rerun() 
+        else:
+            st.warning("Preencha todos os campos da perna.")
+
+    # --- FORMULÁRIO PARA SALVAR A OPERAÇÃO COMPLETA ---
+    st.markdown("---")
+    st.markdown("##### 2. Salve a Estratégia Completa")
     with st.form("form_nova_operacao"):
-        st.markdown("##### Detalhes da Estratégia")
+        
+        # Exibe as pernas que já foram adicionadas à lista
+        if st.session_state.pernas_operacao:
+            st.markdown("###### Pernas a serem registradas:")
+            df_pernas = pd.DataFrame(st.session_state.pernas_operacao)
+            st.dataframe(df_pernas, use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhuma perna adicionada à operação ainda.")
+
+        st.markdown("###### Detalhes da Estratégia")
         col1, col2, col3 = st.columns(3)
         with col1:
             ativo_subjacente = st.text_input("Ativo Subjacente (ex: PETR4)")
@@ -342,45 +384,11 @@ with tab_operacoes:
         with col3:
             data_montagem = st.date_input("Data de Montagem", value=utils.get_local_today())
 
-        st.markdown("---")
-        st.markdown("##### Pernas da Operação")
-        
-        # --- Formulário para adicionar uma nova perna ---
-        col_perna1, col_perna2, col_perna3, col_perna4, col_perna5 = st.columns(5)
-        with col_perna1:
-            codigo_opcao = st.text_input("Código da Opção", key="codigo_opcao")
-        with col_perna2:
-            tipo_operacao = st.selectbox("Operação", ["compra", "venda"], key="tipo_operacao")
-        with col_perna3:
-            quantidade_perna = st.number_input("Quantidade", min_value=1, step=1, key="qtd_perna")
-        with col_perna4:
-            preco_entrada = st.number_input("Preço de Entrada (R$)", min_value=0.0, format="%.2f", key="preco_entrada")
-        with col_perna5:
-            data_vencimento = st.date_input("Vencimento", key="venc_perna")
-        
-        if st.button("Adicionar Perna"):
-            if codigo_opcao and quantidade_perna > 0 and preco_entrada > 0:
-                st.session_state.pernas_operacao.append({
-                    "codigo_opcao": codigo_opcao.upper(),
-                    "tipo_opcao": "CALL" if 'C' in codigo_opcao.upper() else "PUT", # Lógica simples, pode ser melhorada
-                    "tipo_operacao": tipo_operacao,
-                    "quantidade": quantidade_perna,
-                    "preco_entrada": preco_entrada,
-                    "data_vencimento": data_vencimento
-                })
-            else:
-                st.warning("Preencha todos os campos da perna.")
-        
-        # --- Exibe as pernas adicionadas ---
-        if st.session_state.pernas_operacao:
-            st.markdown("###### Pernas a serem registradas:")
-            df_pernas = pd.DataFrame(st.session_state.pernas_operacao)
-            st.dataframe(df_pernas, use_container_width=True, hide_index=True)
-
+        # O único botão dentro do formulário é o de submissão
         submitted = st.form_submit_button("Salvar Operação Estruturada", type="primary")
         if submitted:
             if not ativo_subjacente or not nome_estrategia or not st.session_state.pernas_operacao:
-                st.error("Preencha os detalhes da estratégia e adicione pelo menos uma perna.")
+                st.error("Preencha os detalhes da estratégia e adicione pelo menos uma perna antes de salvar.")
             else:
                 try:
                     database.add_operacao_estruturada(user_id, ativo_subjacente.upper(), nome_estrategia, data_montagem.isoformat(), st.session_state.pernas_operacao)
@@ -390,7 +398,7 @@ with tab_operacoes:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao salvar a operação: {e}")
-
+                    
     # --- VISUALIZAÇÃO E GERENCIAMENTO DAS OPERAÇÕES EM ABERTO ---
 st.markdown("---")
 st.markdown("### Operações em Aberto")
