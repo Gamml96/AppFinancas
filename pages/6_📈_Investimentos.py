@@ -497,24 +497,14 @@ with tab_operacoes:
             'Operação (C/V)', 'Strike', 'Qtd'
         ])
 
-        # 1. Agrupa o DataFrame principal pelo Ativo Subjacente
         for ativo, df_ativo in df_finalizadas.groupby('Ativo'):
-            
-            # Cria um expander principal para cada ativo
             with st.expander(f"**Ativo: {ativo}**"):
-                
-                # 2. Agora, itera sobre as operações DENTRO do grupo do ativo
                 for operacao_id, group in df_ativo.groupby('ID'):
                     info = group.iloc[0]
                     resultado_reais = info['Resultado R$']
-                    
                     valor_nocional = (group['Strike'] * group['Qtd']).sum()
-                    
-                    resultado_percentual = 0.0
-                    if valor_nocional > 0:
-                        resultado_percentual = (resultado_reais / valor_nocional) * 100
+                    resultado_percentual = (resultado_reais / valor_nocional * 100) if valor_nocional > 0 else 0
 
-                    # Um sub-título para cada operação dentro do expander do ativo
                     st.markdown(f"##### {info['Estratégia']} (Finalizada em: {info['Data Finalização'].strftime('%d/%m/%Y')})")
                     
                     col1, col2, col3 = st.columns(3)
@@ -527,11 +517,29 @@ with tab_operacoes:
 
                     st.markdown(f"Status final: **{info['Status']}**")
                     
-                    # Prepara o DataFrame para exibição
                     df_display = group[['Código Opção', 'Opção (C/P)', 'Operação (C/V)', 'Strike', 'Qtd']]
-                    
                     st.markdown("###### Pernas da Operação:")
                     st.dataframe(df_display, use_container_width=True, hide_index=True)
+
+                    # --- NOVOS BOTÕES DE AÇÃO ---
+                    st.markdown("###### Ações:")
+                    col_actions1, col_actions2 = st.columns([1, 1.5])
+                    with col_actions1:
+                        if st.button("Reabrir Operação", key=f"reabrir_{operacao_id}", help="Mover esta operação de volta para 'Operações em Aberto' para edição."):
+                            try:
+                                database.reabrir_operacao(operacao_id)
+                                st.success(f"Operação '{info['Estratégia']}' foi reaberta! Você pode editá-la na seção 'Operações em Aberto'.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro ao reabrir operação: {e}")
                     
-                    # Adiciona um separador entre as operações do mesmo ativo
-                    st.markdown("---") 
+                    with col_actions2:
+                        if st.button("Excluir Permanentemente", key=f"excluir_hist_{operacao_id}", type="primary"):
+                            try:
+                                database.delete_operacao_inteira(operacao_id)
+                                st.warning(f"Operação '{info['Estratégia']}' foi excluída do histórico.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro ao excluir operação: {e}")
+                    
+                    st.markdown("---")

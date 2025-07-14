@@ -913,3 +913,31 @@ def get_operacoes_finalizadas(user_id):
     """
     return _execute_query(query, (user_id,), fetch='all')
 
+def reabrir_operacao(operacao_id):
+    """
+    Reabre uma operação finalizada, revertendo seu status e limpando os dados de saída.
+    """
+    conn = _get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 1. Limpa os dados de saída das pernas
+            cur.execute(
+                "UPDATE operacoes_pernas SET preco_saida = NULL WHERE operacao_id = %s",
+                (operacao_id,)
+            )
+
+            # 2. Reverte o status da operação principal
+            cur.execute(
+                "UPDATE operacoes_estruturadas SET status = 'Aberta', data_desmontagem = NULL, resultado = NULL WHERE operacao_id = %s",
+                (operacao_id,)
+            )
+            
+            conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+    
+    st.cache_data.clear()
+
