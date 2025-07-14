@@ -472,27 +472,45 @@ with tab_operacoes:
     # --- HISTÓRICO DE OPERAÇÕES FINALIZADAS ---
     st.markdown("---")
     st.markdown("### Histórico de Operações Finalizadas")
+
     operacoes_finalizadas = database.get_operacoes_finalizadas(user_id)
 
     if not operacoes_finalizadas:
         st.info("Nenhuma operação finalizada encontrada.")
     else:
-        df_finalizadas = pd.DataFrame(operacoes_finalizadas, columns=['ID', 'Ativo', 'Estratégia', 'Data Montagem', 'Data Finalização', 'Status', 'Resultado R$', 'Strike', 'Qtd'])
+        # A lista de colunas agora reflete todos os campos buscados
+        df_finalizadas = pd.DataFrame(operacoes_finalizadas, columns=[
+            'ID', 'Ativo', 'Estratégia', 'Data Montagem', 'Data Finalização', 
+            'Status', 'Resultado R$', 'Código Opção', 'Opção (C/P)', 
+            'Operação (C/V)', 'Strike', 'Qtd'
+        ])
+
         for operacao_id, group in df_finalizadas.groupby('ID'):
             info = group.iloc[0]
             resultado_reais = info['Resultado R$']
+            
+            # O cálculo do nocional permanece o mesmo
             valor_nocional = (group['Strike'] * group['Qtd']).sum()
-            resultado_percentual = (resultado_reais / valor_nocional * 100) if valor_nocional > 0 else 0
+            
+            resultado_percentual = 0.0
+            if valor_nocional > 0:
+                resultado_percentual = (resultado_reais / valor_nocional) * 100
 
             expander_title = f"**{info['Estratégia']} em {info['Ativo']}** (Finalizada em: {info['Data Finalização'].strftime('%d/%m/%Y')})"
             with st.expander(expander_title):
+                
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Valor Nocional (Aprox.)", f"{utils.formatar_moeda_brl(valor_nocional)}")
-                with col2:
                     st.metric("Resultado Financeiro", f"R$ {resultado_reais:,.2f}")
-                with col3:
+                with col2:
                     st.metric("Resultado Percentual", f"{resultado_percentual:.2f}%")
+                with col3:
+                    st.metric("Valor Nocional (Aprox.)", f"R$ {valor_nocional:,.2f}")
+
                 st.markdown(f"Status final: **{info['Status']}**")
+                
+                # DataFrame que será exibido, com as colunas desejadas
+                df_display = group[['Código Opção', 'Opção (C/P)', 'Operação (C/V)', 'Strike', 'Qtd']]
+                
                 st.markdown("###### Pernas da Operação:")
-                st.dataframe(group[['Strike', 'Qtd']], use_container_width=True, hide_index=True)
+                st.dataframe(df_display, use_container_width=True, hide_index=True)

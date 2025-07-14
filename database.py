@@ -890,7 +890,7 @@ def delete_operacao_inteira(operacao_id):
 def get_operacoes_finalizadas(user_id):
     """
     Busca todas as operações com status 'Fechada' ou 'Expirada'.
-    --- VERSÃO ATUALIZADA PARA INCLUIR STRIKE ---
+    --- VERSÃO ATUALIZADA PARA INCLUIR TODOS OS DETALHES DAS PERNAS ---
     """
     query = """
         SELECT
@@ -901,6 +901,9 @@ def get_operacoes_finalizadas(user_id):
             op.data_desmontagem,
             op.status,
             op.resultado,
+            p.codigo_opcao,    -- Adicionado
+            p.tipo_opcao,      -- Adicionado
+            p.tipo_operacao,   -- Adicionado
             p.strike,
             p.quantidade
         FROM operacoes_estruturadas op
