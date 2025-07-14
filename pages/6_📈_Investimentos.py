@@ -342,7 +342,7 @@ with tab_operacoes:
     with col_perna3:
         tipo_operacao = st.selectbox("Operação", ["compra", "venda"], key="tipo_operacao")
     with col_perna4:
-        quantidade_perna = st.number_input("Quantidade", min_value=1, step=1, key="qtd_perna")
+        quantidade_perna = st.number_input("Quantidade", min_value=1, step=100, key="qtd_perna")
     with col_perna5:
         preco_entrada = st.number_input("Preço Entrada (R$)", min_value=0.0, format="%.2f", key="preco_entrada")
     with col_perna6:
