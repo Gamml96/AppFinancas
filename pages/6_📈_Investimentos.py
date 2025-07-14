@@ -457,10 +457,23 @@ with tab_operacoes:
                 st.markdown("---")
                 st.markdown("##### Desmontar Operação")
                 st.metric("Custo de Montagem", utils.formatar_moeda_brl(custo_montagem))
+                
                 pernas_saida = {}
+                # O loop permanece o mesmo
                 for _, perna in group.iterrows():
                     codigo = perna['Código Opção']
-                    pernas_saida[codigo] = st.number_input(f"Preço de Saída para {codigo}", min_value=0.0, format="%.2f", key=f"saida_{operacao_id}_{codigo}")
+                    perna_id = perna['Perna ID'] # Usamos o ID da perna para a chave
+                    
+                    # A chave agora inclui o perna_id, garantindo que seja 100% única
+                    preco_saida = st.number_input(
+                        f"Preço de Saída para {codigo}", 
+                        min_value=0.0, 
+                        format="%.2f", 
+                        key=f"saida_{operacao_id}_{perna_id}" # <<< CHAVE CORRIGIDA
+                    )
+                    # Ainda usamos o 'codigo' como chave do dicionário, o que está correto
+                    pernas_saida[codigo] = preco_saida
+
                 if st.button("Confirmar Desmontagem", key=f"desmontar_{operacao_id}"):
                     try:
                         database.desmontar_operacao(operacao_id, utils.get_local_today().isoformat(), pernas_saida)
