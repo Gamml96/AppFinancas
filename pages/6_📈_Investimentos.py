@@ -478,39 +478,47 @@ with tab_operacoes:
     if not operacoes_finalizadas:
         st.info("Nenhuma operação finalizada encontrada.")
     else:
-        # A lista de colunas agora reflete todos os campos buscados
         df_finalizadas = pd.DataFrame(operacoes_finalizadas, columns=[
             'ID', 'Ativo', 'Estratégia', 'Data Montagem', 'Data Finalização', 
             'Status', 'Resultado R$', 'Código Opção', 'Opção (C/P)', 
             'Operação (C/V)', 'Strike', 'Qtd'
         ])
 
-        for operacao_id, group in df_finalizadas.groupby('ID'):
-            info = group.iloc[0]
-            resultado_reais = info['Resultado R$']
+        # 1. Agrupa o DataFrame principal pelo Ativo Subjacente
+        for ativo, df_ativo in df_finalizadas.groupby('Ativo'):
             
-            # O cálculo do nocional permanece o mesmo
-            valor_nocional = (group['Strike'] * group['Qtd']).sum()
-            
-            resultado_percentual = 0.0
-            if valor_nocional > 0:
-                resultado_percentual = (resultado_reais / valor_nocional) * 100
+            # Cria um expander principal para cada ativo
+            with st.expander(f"**Ativo: {ativo}**"):
+                
+                # 2. Agora, itera sobre as operações DENTRO do grupo do ativo
+                for operacao_id, group in df_ativo.groupby('ID'):
+                    info = group.iloc[0]
+                    resultado_reais = info['Resultado R$']
+                    
+                    valor_nocional = (group['Strike'] * group['Qtd']).sum()
+                    
+                    resultado_percentual = 0.0
+                    if valor_nocional > 0:
+                        resultado_percentual = (resultado_reais / valor_nocional) * 100
 
-            expander_title = f"**{info['Estratégia']} em {info['Ativo']}** (Finalizada em: {info['Data Finalização'].strftime('%d/%m/%Y')})"
-            with st.expander(expander_title):
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Resultado Financeiro", f"R$ {resultado_reais:,.2f}")
-                with col2:
-                    st.metric("Resultado Percentual", f"{resultado_percentual:.2f}%")
-                with col3:
-                    st.metric("Valor Nocional (Aprox.)", f"R$ {valor_nocional:,.2f}")
+                    # Um sub-título para cada operação dentro do expander do ativo
+                    st.markdown(f"##### {info['Estratégia']} (Finalizada em: {info['Data Finalização'].strftime('%d/%m/%Y')})")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Resultado Financeiro", f"R$ {resultado_reais:,.2f}")
+                    with col2:
+                        st.metric("Resultado Percentual", f"{resultado_percentual:.2f}%")
+                    with col3:
+                        st.metric("Valor Nocional (Aprox.)", f"R$ {valor_nocional:,.2f}")
 
-                st.markdown(f"Status final: **{info['Status']}**")
-                
-                # DataFrame que será exibido, com as colunas desejadas
-                df_display = group[['Código Opção', 'Opção (C/P)', 'Operação (C/V)', 'Strike', 'Qtd']]
-                
-                st.markdown("###### Pernas da Operação:")
-                st.dataframe(df_display, use_container_width=True, hide_index=True)
+                    st.markdown(f"Status final: **{info['Status']}**")
+                    
+                    # Prepara o DataFrame para exibição
+                    df_display = group[['Código Opção', 'Opção (C/P)', 'Operação (C/V)', 'Strike', 'Qtd']]
+                    
+                    st.markdown("###### Pernas da Operação:")
+                    st.dataframe(df_display, use_container_width=True, hide_index=True)
+                    
+                    # Adiciona um separador entre as operações do mesmo ativo
+                    st.markdown("---") 
