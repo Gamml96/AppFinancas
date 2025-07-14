@@ -488,7 +488,7 @@ with tab_operacoes:
             with st.expander(expander_title):
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Valor Nocional (Aprox.)", f"R$ {valor_nocional:,.2f}")
+                    st.metric("Valor Nocional (Aprox.)", f"{utils.formatar_moeda_brl(valor_nocional)}")
                 with col2:
                     st.metric("Resultado Financeiro", f"R$ {resultado_reais:,.2f}")
                 with col3:
