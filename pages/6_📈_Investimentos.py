@@ -488,11 +488,11 @@ with tab_operacoes:
             with st.expander(expander_title):
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Resultado Financeiro", f"R$ {resultado_reais:,.2f}")
-                with col2:
-                    st.metric("Resultado Percentual", f"{resultado_percentual:.2f}%")
-                with col3:
                     st.metric("Valor Nocional (Aprox.)", f"R$ {valor_nocional:,.2f}")
+                with col2:
+                    st.metric("Resultado Financeiro", f"R$ {resultado_reais:,.2f}")
+                with col3:
+                    st.metric("Resultado Percentual", f"{resultado_percentual:.2f}%")
                 st.markdown(f"Status final: **{info['Status']}**")
                 st.markdown("###### Pernas da Operação:")
                 st.dataframe(group[['Strike', 'Qtd']], use_container_width=True, hide_index=True)
