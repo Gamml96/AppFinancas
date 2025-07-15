@@ -30,10 +30,10 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
 
     Regras:
     - Seja conciso e direto.
-    - Foque no insight mais importante (maior gasto, etc.).
     - Dê uma sugestão prática ou um elogio, se apropriado.
     - NÃO invente dados. Baseie-se APENAS no resumo JSON fornecido.
-    - NÃO use markdown na sua resposta, apenas texto simples.
+    - Use apenas texto simples, sem formatação.
+    - IGNORE a categoria de transferências
 
     Aqui está o resumo dos dados financeiros do usuário para o período {periodo_analise}:
     ```json
