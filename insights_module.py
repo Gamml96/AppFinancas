@@ -113,7 +113,7 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
     except Exception as e:
         return f"Ocorreu um erro ao comunicar com a IA do Groq: {e}"
     
-def gerar_query_sql_com_ia(user_id, pergunta, schema):
+def gerar_query_sql_com_ia(user_id, pergunta, schema): 
     """
     Usa a LLM para traduzir uma pergunta em linguagem natural para uma query SQL.
     --- VERSÃO FINAL COM ILIKE PARA CASE-INSENSITIVE ---
