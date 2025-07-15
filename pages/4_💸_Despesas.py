@@ -25,6 +25,7 @@ with st.form("form_nova_despesa"):
         # --- PONTO CENTRAL DA INTELIGÊNCIA ARTIFICIAL ---
     # 1. Tenta prever a categoria com base no que foi digitado na descrição.
     sugestao_categoria = None
+    print(descricao)
     if descricao:  # A previsão só acontece se o campo "Descrição" não estiver vazio.
         # Chama a função do ai_module que carrega o modelo global e faz a previsão.
         sugestao_categoria = ai_module.prever_categoria(descricao)
