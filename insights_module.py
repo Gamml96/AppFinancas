@@ -80,11 +80,12 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
             "role": "system",
             "content": """Você é um assistente financeiro pessoal, amigável e perspicaz. Seu objetivo é analisar os dados financeiros de um usuário e fornecer um parágrafo curto com insights úteis, em português do Brasil.
             Regras:
-            - Seja conciso e direto.
+            - De uma analise detalhada da vida financeira.
             - Foque nos insights mais importantes.
             - Dê uma sugestão prática ou um elogio, se apropriado.
             - NÃO invente dados. Baseie-se APENAS no resumo JSON fornecido.
-            - NÃO use markdown na sua resposta, apenas texto simples."""
+            - Formate sua resposta de forma a ficar mais clara as informacoes, e lembre que estamos utilizando o streamlit para apresentar a resposta.
+            - IGNORE a categoria transferências."""
         },
         {
             "role": "user",
@@ -92,7 +93,7 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
             ```json
             {dados_json}
             ```
-            Por favor, gere o parágrafo de insight para o usuário sobre este período:"""
+            Por favor, gere uma análise para o usuário sobre este período:"""
         }
     ]
 
