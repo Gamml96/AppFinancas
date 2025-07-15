@@ -116,15 +116,16 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
 def gerar_query_sql_com_ia(user_id, pergunta, schema):
     """
     Usa a LLM para traduzir uma pergunta em linguagem natural para uma query SQL.
-    --- VERSÃO FINAL E ROBUSTA ---
+    --- VERSÃO FINAL COM ILIKE PARA CASE-INSENSITIVE ---
     """
     prompt_gerador_sql = f"""
     Sua tarefa é agir como um especialista em SQL do dialeto PostgreSQL. Baseado no schema do banco de dados e na pergunta do usuário, gere uma ÚNICA query SQL que responda à pergunta.
 
     REGRAS CRÍTICAS:
-    1.  A sua resposta deve conter APENAS o código SQL. Não adicione NENHUMA palavra de explicação, NENHUMA saudação, NADA além do comando SQL.
+    1.  A sua resposta deve conter APENAS o código SQL. Não adicione NENHUMA palavra de explicação.
     2.  A query DEVE começar com a palavra SELECT.
-    3.  SEMPRE inclua a cláusula "WHERE user_id = {user_id}" em qualquer consulta para garantir a privacidade e segurança dos dados do usuário.
+    3.  SEMPRE inclua a cláusula "WHERE user_id = {user_id}" em qualquer consulta para garantir a privacidade.
+    4.  Para comparações de texto em cláusulas WHERE (como nome de categoria ou descrição), SEMPRE use o operador "ILIKE" em vez de "=" para garantir que a busca não seja sensível a maiúsculas/minúsculas. Por exemplo, use "categoria ILIKE '%gasolina%'" em vez de "categoria = 'gasolina'".
 
     SCHEMA DO BANCO DE DADOS:
     ---
@@ -145,16 +146,12 @@ def gerar_query_sql_com_ia(user_id, pergunta, schema):
         
         resposta_completa = response.choices[0].message.content.strip()
         
-        # --- LÓGICA DE EXTRAÇÃO E LIMPEZA APRIMORADA ---
-        # 1. Remove potenciais marcadores de bloco de código (```sql e ```)
         query_limpa = re.sub(r"```sql|```", "", resposta_completa).strip()
 
-        # 2. Verifica se o resultado realmente se parece com uma query
         if query_limpa.upper().startswith("SELECT"):
-            print(f"Query SQL gerada e limpa: {query_limpa}") # Para depuração
+            print(f"Query SQL gerada e limpa: {query_limpa}")
             return query_limpa
         else:
-            # Se, mesmo após a limpeza, não começar com SELECT, algo está errado.
             print(f"Resposta da IA não continha uma query SQL válida: {resposta_completa}")
             return None
 
