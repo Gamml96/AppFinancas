@@ -104,7 +104,7 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
         chat_completion = client.chat.completions.create(
             messages=messages,
             model="llama3-8b-8192", # Modelo popular e rápido disponível no Groq. Outra opção é "mixtral-8x7b-32768".
-            temperature=0.7,
+            temperature=1.0,
             max_tokens=1024,
         )
         # A resposta vem na mesma estrutura da API da OpenAI
