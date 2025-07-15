@@ -42,29 +42,29 @@ with st.form("form_perfil"):
 st.markdown("---")
 change_user_password(username)
 
-st.markdown("---")
-st.markdown("### Privacidade e Inteligência Artificial")
+# st.markdown("---")
+# st.markdown("### Privacidade e Inteligência Artificial")
 
-# A função get_user_profile agora nos retorna o status atual do consentimento
-current_consent = profile.get("consent_ai_training", False)
+# # A função get_user_profile agora nos retorna o status atual do consentimento
+# current_consent = profile.get("consent_ai_training", False)
 
-# Usamos um st.toggle para uma interface amigável
-new_consent = st.toggle(
-    "Permitir o uso de dados para treinar a IA",
-    value=current_consent,
-    help="Ao ativar, você permite que os dados de 'descrição' e 'categoria' de suas despesas, de forma anônima, sejam usados para treinar o modelo de IA global, melhorando as sugestões para todos os usuários."
-)
+# # Usamos um st.toggle para uma interface amigável
+# new_consent = st.toggle(
+#     "Permitir o uso de dados para treinar a IA",
+#     value=current_consent,
+#     help="Ao ativar, você permite que os dados de 'descrição' e 'categoria' de suas despesas, de forma anônima, sejam usados para treinar o modelo de IA global, melhorando as sugestões para todos os usuários."
+# )
 
-# Se o valor do toggle mudou, atualizamos no banco de dados
-if new_consent != current_consent:
-    try:
-        database.update_user_consent(user_id, new_consent)
-        st.toast("Preferência de privacidade atualizada!", icon="✅")
-        # Força a página a recarregar para garantir que o estado do 'toggle'
-        # reflita o que está salvo no banco de dados.
-        st.rerun()
-    except Exception as e:
-        st.error(f"Erro ao atualizar a preferência: {e}")
+# # Se o valor do toggle mudou, atualizamos no banco de dados
+# if new_consent != current_consent:
+#     try:
+#         database.update_user_consent(user_id, new_consent)
+#         st.toast("Preferência de privacidade atualizada!", icon="✅")
+#         # Força a página a recarregar para garantir que o estado do 'toggle'
+#         # reflita o que está salvo no banco de dados.
+#         st.rerun()
+#     except Exception as e:
+#         st.error(f"Erro ao atualizar a preferência: {e}")
 
 
 st.markdown("---")
