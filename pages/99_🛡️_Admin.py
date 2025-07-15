@@ -4,7 +4,7 @@ import pandas as pd
 import datetime
 import utils
 import bcrypt
-
+import ai_module
 
 
 # --- Guarda de Autenticação ---
@@ -165,4 +165,18 @@ with st.form("form_add_user"):
             except Exception as e:
                 st.error(f"Ocorreu um erro ao criar o usuário: {e}")
 
-# --- FIM DA NOVA SEÇÃO ---
+st.markdown("---")
+st.markdown("### Gerenciamento do Modelo de IA")
+st.info("O modelo de IA global aprende com os dados de todos os usuários que deram consentimento. Treine o modelo periodicamente para melhorar a precisão das sugestões de categoria.")
+
+if st.button("Iniciar Treinamento do Modelo Global Agora", type="primary"):
+    st.write("Iniciando o processo de treinamento... Por favor, aguarde. Isto pode levar alguns minutos dependendo do volume de dados.")
+    
+    # Usamos o st.spinner para dar um feedback visual durante o treinamento
+    with st.spinner("Buscando dados e treinando o modelo..."):
+        try:
+            # Chama a função de treinamento que criamos no módulo de IA
+            ai_module.treinar_modelo_global()
+            st.success("Modelo de Inteligência Artificial treinado e atualizado com sucesso!")
+        except Exception as e:
+            st.error(f"Ocorreu um erro durante o treinamento: {e}")
