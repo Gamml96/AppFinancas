@@ -5,6 +5,7 @@ import google.generativeai as genai
 import database
 import json
 from openai import OpenAI # Importamos a biblioteca da OpenAI
+import re
 
 def gerar_insights_financeiros_gemini(user_id, start_date, end_date):
     """
@@ -115,17 +116,15 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
 def gerar_query_sql_com_ia(user_id, pergunta, schema):
     """
     Usa a LLM para traduzir uma pergunta em linguagem natural para uma query SQL.
-    --- VERSÃO ATUALIZADA COM EXTRAÇÃO ROBUSTA DE SQL ---
+    --- VERSÃO FINAL E ROBUSTA ---
     """
     prompt_gerador_sql = f"""
-    Sua tarefa é agir como um especialista em SQL. Baseado no schema do banco de dados e na pergunta do usuário, gere uma ÚNICA query SQL que responda à pergunta.
+    Sua tarefa é agir como um especialista em SQL do dialeto PostgreSQL. Baseado no schema do banco de dados e na pergunta do usuário, gere uma ÚNICA query SQL que responda à pergunta.
 
-    REGRAS IMPORTANTES:
-    1.  Use APENAS as tabelas e colunas descritas no schema. Não invente colunas.
-    2.  A query DEVE ser apenas de leitura (começar com SELECT).
-    3.  SEMPRE filtre os resultados pelo 'user_id' fornecido para garantir a privacidade do usuário. O user_id é: {user_id}.
-    4.  Use o dialeto PostgreSQL.
-    5.  A sua resposta deve conter APENAS o código SQL, sem nenhum texto adicional, explicação ou formatação como ```sql.
+    REGRAS CRÍTICAS:
+    1.  A sua resposta deve conter APENAS o código SQL. Não adicione NENHUMA palavra de explicação, NENHUMA saudação, NADA além do comando SQL.
+    2.  A query DEVE começar com a palavra SELECT.
+    3.  SEMPRE inclua a cláusula "WHERE user_id = {user_id}" em qualquer consulta para garantir a privacidade e segurança dos dados do usuário.
 
     SCHEMA DO BANCO DE DADOS:
     ---
@@ -134,34 +133,35 @@ def gerar_query_sql_com_ia(user_id, pergunta, schema):
 
     Pergunta do usuário: "{pergunta}"
 
-    Sua query SQL:
+    Query SQL:
     """
     try:
-        client = OpenAI(api_key=st.secrets["groq"]["api_key"], base_url="[https://api.groq.com/openai/v1](https://api.groq.com/openai/v1)")
+        client = OpenAI(api_key=st.secrets["groq"]["api_key"], base_url="https://api.groq.com/openai/v1")
         response = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt_gerador_sql}],
             model="llama3-70b-8192",
             temperature=0.0,
         )
         
-        resposta_completa = response.choices[0].message.content
+        resposta_completa = response.choices[0].message.content.strip()
         
-        # --- LÓGICA DE EXTRAÇÃO MELHORADA ---
-        # Usamos uma expressão regular para encontrar o primeiro bloco que começa com SELECT e termina com ;
-        match = re.search(r"SELECT.*?;", resposta_completa, re.IGNORECASE | re.DOTALL)
-        
-        if match:
-            query_gerada = match.group(0).strip()
-            print(f"Query SQL extraída com sucesso: {query_gerada}") # Para depuração
-            return query_gerada
+        # --- LÓGICA DE EXTRAÇÃO E LIMPEZA APRIMORADA ---
+        # 1. Remove potenciais marcadores de bloco de código (```sql e ```)
+        query_limpa = re.sub(r"```sql|```", "", resposta_completa).strip()
+
+        # 2. Verifica se o resultado realmente se parece com uma query
+        if query_limpa.upper().startswith("SELECT"):
+            print(f"Query SQL gerada e limpa: {query_limpa}") # Para depuração
+            return query_limpa
         else:
-            print(f"Não foi possível extrair uma query SQL válida da resposta: {resposta_completa}")
+            # Se, mesmo após a limpeza, não começar com SELECT, algo está errado.
+            print(f"Resposta da IA não continha uma query SQL válida: {resposta_completa}")
             return None
 
     except Exception as e:
-        print(f"Erro ao gerar SQL: {e}")
+        print(f"Erro na API ao gerar SQL: {e}")
         return None
-
+    
 def responder_pergunta_do_usuario(user_id, pergunta):
     """
     Orquestra o processo Text-to-SQL:
