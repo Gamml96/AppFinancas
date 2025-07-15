@@ -162,46 +162,67 @@ def gerar_query_sql_com_ia(user_id, pergunta, schema):
         print(f"Erro na API ao gerar SQL: {e}")
         return None
     
+Olá! Esta resposta da IA é um exemplo clássico do desafio em sistemas Text-to-SQL. A IA está a ser "educada" e a tentar dar uma resposta útil em vez de um erro técnico, mas o resultado final não é o esperado.
+
+A mensagem "não foi possível encontrar informações" indica que o fluxo completo funcionou (a IA gerou uma query SQL, a query foi executada), mas a consulta ao banco de dados retornou um resultado vazio.
+
+Isto pode acontecer por duas razões principais:
+
+Não existem dados: Pode ser que realmente não haja nenhuma despesa com "gasolina" registada neste mês.
+
+A Query SQL está errada: A IA pode ter gerado uma query que é sintaticamente válida, mas logicamente incorreta, não encontrando os dados que de facto existem. Por exemplo, pode ter filtrado a data errada ou procurado o texto de forma demasiado restritiva.
+
+Para resolver isto, precisamos de "abrir a caixa preta" e ver exatamente qual query a IA está a gerar.
+
+A Solução: Depurar a Query Gerada
+Vamos fazer uma pequena alteração no nosso insights_module.py para que, além de executar a query, ele também nos mostre qual foi a query gerada. Isto irá permitir-nos diagnosticar o problema de forma precisa.
+
+Substitua a função responder_pergunta_do_usuario no seu ficheiro insights_module.py pela versão abaixo.
+
+Python
+
+# Em insights_module.py, substitua a função existente
+
 def responder_pergunta_do_usuario(user_id, pergunta):
     """
-    Orquestra o processo Text-to-SQL:
-    1. Obtém o schema do banco.
-    2. Usa a IA para gerar a query SQL.
-    3. Executa a query de forma segura.
-    4. Usa a IA para gerar a resposta final em linguagem natural.
+    Orquestra o processo Text-to-SQL com depuração adicionada.
     """
     # 1. Obter o schema do banco
     schema = database.get_full_database_schema()
     
     # 2. Gerar a query SQL
+    st.session_state.last_sql_query = "Nenhuma query foi gerada ainda." # Inicializa no estado da sessão
     query_sql = gerar_query_sql_com_ia(user_id, pergunta, schema)
     
     if not query_sql:
         return "Desculpe, não consegui traduzir sua pergunta em uma consulta ao banco de dados."
 
+    # Armazena a última query gerada no estado da sessão para depuração
+    st.session_state.last_sql_query = query_sql
+    
     # 3. Executar a query de forma segura
     try:
         resultados = database.execute_generated_sql(query_sql)
-    except ValueError as ve: # Erro de segurança (ex: não é um SELECT)
+    except ValueError as ve:
         return f"Erro de segurança: {ve}"
     except Exception as e:
-        print(f"Erro ao executar SQL: {e}\nQuery: {query_sql}")
-        return "Ocorreu um erro ao buscar os dados para responder sua pergunta."
+        # Retorna a query que causou o erro para facilitar a depuração
+        return f"Ocorreu um erro ao executar a consulta no banco de dados.\n\n**Query Tentada:**\n```sql\n{query_sql}\n```\n**Erro:**\n`{e}`"
 
     # 4. Gerar a resposta final com base nos resultados
     prompt_final = f"""
-    Contexto: A pergunta do usuário foi '{pergunta}'. A consulta ao banco de dados retornou os seguintes dados em formato JSON:
+    Contexto: A pergunta do usuário foi '{pergunta}'. A consulta ao banco de dados retornou os seguintes dados:
     {json.dumps(resultados, indent=2, default=str)}
 
-    Sua tarefa é analisar os dados do contexto e responder à pergunta do usuário de forma clara, amigável e em português.
-    Se os dados estiverem vazios, informe ao usuário que não foram encontrados resultados para a pergunta dele.
+    Sua tarefa é analisar os dados do contexto e responder à pergunta do usuário de forma clara e amigável em português.
+    Se a lista de dados estiver vazia, informe ao usuário que você não encontrou resultados para a busca dele. Seja específico se possível.
     """
     
     try:
         client = OpenAI(api_key=st.secrets["groq"]["api_key"], base_url="https://api.groq.com/openai/v1")
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt_final}],
-            model="llama3-8b-8192", # Um modelo mais rápido é suficiente para formatar a resposta
+            model="llama3-8b-8192",
             temperature=0.7
         )
         return chat_completion.choices[0].message.content
