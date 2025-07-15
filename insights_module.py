@@ -115,6 +115,7 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
 def gerar_query_sql_com_ia(user_id, pergunta, schema):
     """
     Usa a LLM para traduzir uma pergunta em linguagem natural para uma query SQL.
+    --- VERSÃO ATUALIZADA COM EXTRAÇÃO ROBUSTA DE SQL ---
     """
     prompt_gerador_sql = f"""
     Sua tarefa é agir como um especialista em SQL. Baseado no schema do banco de dados e na pergunta do usuário, gere uma ÚNICA query SQL que responda à pergunta.
@@ -124,6 +125,7 @@ def gerar_query_sql_com_ia(user_id, pergunta, schema):
     2.  A query DEVE ser apenas de leitura (começar com SELECT).
     3.  SEMPRE filtre os resultados pelo 'user_id' fornecido para garantir a privacidade do usuário. O user_id é: {user_id}.
     4.  Use o dialeto PostgreSQL.
+    5.  A sua resposta deve conter APENAS o código SQL, sem nenhum texto adicional, explicação ou formatação como ```sql.
 
     SCHEMA DO BANCO DE DADOS:
     ---
@@ -135,15 +137,27 @@ def gerar_query_sql_com_ia(user_id, pergunta, schema):
     Sua query SQL:
     """
     try:
-        client = OpenAI(api_key=st.secrets["groq"]["api_key"], base_url="https://api.groq.com/openai/v1")
+        client = OpenAI(api_key=st.secrets["groq"]["api_key"], base_url="[https://api.groq.com/openai/v1](https://api.groq.com/openai/v1)")
         response = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt_gerador_sql}],
-            model="llama3-70b-8192", # Usamos um modelo maior e mais capaz para gerar SQL
+            model="llama3-70b-8192",
             temperature=0.0,
         )
-        # Extrai a query SQL da resposta da IA
-        query_gerada = response.choices[0].message.content.replace("```sql", "").replace("```", "").strip()
-        return query_gerada
+        
+        resposta_completa = response.choices[0].message.content
+        
+        # --- LÓGICA DE EXTRAÇÃO MELHORADA ---
+        # Usamos uma expressão regular para encontrar o primeiro bloco que começa com SELECT e termina com ;
+        match = re.search(r"SELECT.*?;", resposta_completa, re.IGNORECASE | re.DOTALL)
+        
+        if match:
+            query_gerada = match.group(0).strip()
+            print(f"Query SQL extraída com sucesso: {query_gerada}") # Para depuração
+            return query_gerada
+        else:
+            print(f"Não foi possível extrair uma query SQL válida da resposta: {resposta_completa}")
+            return None
+
     except Exception as e:
         print(f"Erro ao gerar SQL: {e}")
         return None
