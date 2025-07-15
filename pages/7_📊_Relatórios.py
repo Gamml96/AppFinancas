@@ -98,18 +98,18 @@ else:
             # Lógica para definir a cor e o status com base no progresso
             if progresso > 1:
                 status_color_method = st.error
-                status_text = f"Orçamento estourado em R$ {utils.formatar_moeda_brl(abs(row['Restante']))}"
+                status_text = f"Orçamento estourado em {utils.formatar_moeda_brl(abs(row['Restante']))}"
             elif progresso >= 0.8:
                 status_color_method = st.warning
-                status_text = f"Atenção: próximo do limite. Restam R$ {utils.formatar_moeda_brl(row['Restante'])}"
+                status_text = f"Atenção: próximo do limite. Restam {utils.formatar_moeda_brl(row['Restante'])}"
             else:
                 status_color_method = st.success
-                status_text = f"Dentro do orçamento. Restam R$ {utils.formatar_moeda_brl(row['Restante'])}"
+                status_text = f"Dentro do orçamento. Restam {utils.formatar_moeda_brl(row['Restante'])}"
 
             # Exibe as métricas em colunas
             col1, col2 = st.columns(2)
-            col1.metric("Gasto Atual", f"R$ {utils.formatar_moeda_brl(row['Total'])}")
-            col2.metric("Orçamento Total", f"R$ {utils.formatar_moeda_brl(row['Orçamento'])}")
+            col1.metric("Gasto Atual", f" {utils.formatar_moeda_brl(row['Total'])}")
+            col2.metric("Orçamento Total", f" {utils.formatar_moeda_brl(row['Orçamento'])}")
 
             # Barra de progresso visual
             st.progress(min(progresso, 1.0))
