@@ -47,4 +47,4 @@ if st.button("Analisar Período Selecionado", type="primary", use_container_widt
 if st.session_state.insight_gerado:
     st.markdown("---")
     st.subheader("Análise da IA:")
-    st.info(st.session_state.insight_gerado)
+    st.markdown(st.session_state.insight_gerado)
