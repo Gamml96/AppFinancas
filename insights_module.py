@@ -116,7 +116,7 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
 def gerar_query_sql_com_ia(user_id, pergunta, schema):
     """
     Usa a LLM para traduzir uma pergunta em linguagem natural para uma query SQL.
-    --- VERSÃO FINAL COM BUSCA EM MÚLTIPLOS CAMPOS (CATEGORIA E DESCRIÇÃO) ---
+    --- VERSÃO FINAL COM UNACCENT PARA IGNORAR ACENTOS ---
     """
     prompt_gerador_sql = f"""
     Sua tarefa é agir como um especialista em SQL do dialeto PostgreSQL. Baseado no schema do banco de dados e na pergunta do usuário, gere uma ÚNICA query SQL que responda à pergunta.
@@ -125,11 +125,10 @@ def gerar_query_sql_com_ia(user_id, pergunta, schema):
     1.  Sua resposta deve conter APENAS o código SQL. Não adicione NENHUMA palavra de explicação.
     2.  A query DEVE começar com a palavra SELECT.
     3.  SEMPRE inclua a cláusula "WHERE user_id = {user_id}" para garantir a privacidade.
-    4.  Quando a pergunta do usuário se referir a um tipo de gasto ou receita por texto (ex: "gasolina", "salário", "uber"), a sua query DEVE procurar esse texto tanto no campo 'categoria' quanto no campo 'descricao' usando uma cláusula OR.
-    5.  Para essas comparações de texto, SEMPRE use o operador "ILIKE" para que a busca não seja sensível a maiúsculas/minúsculas.
+    4.  Para comparações de texto em cláusulas WHERE (como nome de categoria ou descrição), você DEVE usar a função "unaccent()" combinada com o operador "ILIKE" para garantir que a busca ignore tanto maiúsculas/minúsculas quanto acentos.
 
-    EXEMPLO DE QUERY CORRETA para a pergunta "quanto gastei com mercado":
-    SELECT SUM(valor) FROM despesas WHERE user_id = {user_id} AND (categoria ILIKE '%mercado%' OR descricao ILIKE '%mercado%');
+    EXEMPLO DE QUERY CORRETA para a pergunta "quanto gastei com refeições":
+    SELECT SUM(valor) FROM despesas WHERE user_id = {user_id} AND (unaccent(categoria) ILIKE unaccent('%refeicoes%') OR unaccent(descricao) ILIKE unaccent('%refeicoes%'));
 
     SCHEMA DO BANCO DE DADOS:
     ---
