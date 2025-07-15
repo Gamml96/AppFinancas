@@ -125,7 +125,7 @@ def gerar_query_sql_com_ia(user_id, pergunta, schema):
     1.  A sua resposta deve conter APENAS o código SQL. Não adicione NENHUMA palavra de explicação.
     2.  A query DEVE começar com a palavra SELECT.
     3.  SEMPRE inclua a cláusula "WHERE user_id = {user_id}" em qualquer consulta para garantir a privacidade.
-    4.  Para comparações de texto em cláusulas WHERE (como nome de categoria ou descrição), SEMPRE use o operador "ILIKE" em vez de "=" para garantir que a busca não seja sensível a maiúsculas/minúsculas. Por exemplo, use "categoria ILIKE '%gasolina%'" em vez de "categoria = 'gasolina'".
+    4.  Para comparações de texto em cláusulas WHERE (como nome de categoria ou descrição), SEMPRE use o operador "ILIKE" em vez de "=" para garantir que a busca não seja sensível a maiúsculas/minúsculas. Por exemplo, use "categoria ILIKE '%gasolina%' or descricao ILIKE '%gasolina%'" em vez de "categoria = 'gasolina' or descricao = 'gasolina'".
 
     SCHEMA DO BANCO DE DADOS:
     ---
