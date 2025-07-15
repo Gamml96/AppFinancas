@@ -19,28 +19,41 @@ if not categorias_despesa: st.warning("Cadastre uma categoria de despesa para co
 contas_dict = {conta[1]: conta[0] for conta in contas}
 categorias_list = [cat[1] for cat in categorias_despesa]
 
-with st.form("form_nova_despesa"):
-    st.markdown("### Adicionar Nova Despesa")
-    descricao = st.text_input("Descrição da Despesa")
-        # --- PONTO CENTRAL DA INTELIGÊNCIA ARTIFICIAL ---
-    # 1. Tenta prever a categoria com base no que foi digitado na descrição.
-    sugestao_categoria = None
-    print(descricao)
-    if descricao:  # A previsão só acontece se o campo "Descrição" não estiver vazio.
-        # Chama a função do ai_module que carrega o modelo global e faz a previsão.
-        sugestao_categoria = ai_module.prever_categoria(descricao)
+# --- LÓGICA DE SUGESTÃO DE IA (FORA DO FORMULÁRIO) ---
 
-    # 2. Prepara o selectbox para usar a sugestão da IA.
-    index_sugestao = 0  # O padrão é a primeira categoria da lista.
-    # Se a IA retornou uma sugestão válida e essa sugestão existe na lista de categorias do usuário...
-    if sugestao_categoria and sugestao_categoria in categorias_list:
-        # ...encontramos o índice dessa categoria para pré-selecioná-la.
-        index_sugestao = categorias_list.index(sugestao_categoria)
-    # --- FIM DA LÓGICA DE IA ---
-    valor = st.number_input("Valor", min_value=0.01, format="%.2f", help="Para parcelas, insira o valor total da compra. Para recorrências, insira o valor de cada ocorrência.")
-    data_compra = st.date_input("Data da Primeira Ocorrência/Compra", value=utils.get_local_today())
-    categoria = st.selectbox("Categoria", options=categorias_list)
-    conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()))
+st.markdown("### Adicionar Nova Despesa")
+# 1. O campo "Descrição" agora fica FORA do form.
+#    Usamos uma 'key' para que seu valor seja facilmente acessível.
+descricao = st.text_input(
+    "Descrição da Despesa", 
+    help="Digite a descrição e a categoria será sugerida automaticamente.",
+    key="nova_despesa_descricao"
+)
+
+# 2. A lógica da IA roda a cada vez que a página é atualizada (ou seja, enquanto você digita).
+sugestao_categoria = None
+if descricao:
+    sugestao_categoria = ai_module.prever_categoria(descricao)
+
+# 3. Calculamos o índice da categoria sugerida para usar no selectbox.
+index_sugestao = 0
+if sugestao_categoria and sugestao_categoria in categorias_list:
+    index_sugestao = categorias_list.index(sugestao_categoria)
+
+
+# --- FORMULÁRIO PARA OS DEMAIS DADOS ---
+
+with st.form("form_nova_despesa"):
+    # A categoria já vem pré-selecionada pela lógica acima.
+    categoria = st.selectbox("Categoria", options=categorias_list, index=index_sugestao)
+    
+    col_val, col_data, col_conta = st.columns(3)
+    with col_val:
+        valor = st.number_input("Valor", min_value=0.01, format="%.2f")
+    with col_data:
+        data_compra = st.date_input("Data da Compra", value=utils.get_local_today())
+    with col_conta:
+        conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()))
 
     st.markdown("---")
     st.markdown("#### Detalhes de Pagamento e Repetição")
@@ -48,35 +61,31 @@ with st.form("form_nova_despesa"):
     col1, col2 = st.columns(2)
     with col1:
         tipo_pagamento = st.radio("Tipo de Pagamento", ["Crédito", "Débito"], horizontal=True, key="tipo_pagamento")
-        # Ajustamos o help para maior clareza
-        parcelas_input = st.number_input("Nº de Parcelas", min_value=1, step=1, help="Para compras parceladas. Para assinaturas, use a Recorrência ao lado.")
+        parcelas_input = st.number_input("Nº de Parcelas", min_value=1, step=1)
     
     with col2:
         recorrencia_freq_input = st.selectbox("Frequência da Recorrência", ["Única", "Diária", "Semanal", "Mensal", "Bimestral", "Trimestral", "Semestral", "Anual"], key="recorrencia_freq")
-        recorrencia_vezes_input = st.number_input("Repetir por (vezes)", min_value=1, step=1, help="Deixe 1 para um lançamento único.")
+        recorrencia_vezes_input = st.number_input("Repetir por (vezes)", min_value=1, step=1)
 
-    if st.form_submit_button("Adicionar Despesa"):
-        if not descricao.strip() or valor <= 0:
-            st.warning("Descrição é obrigatória e o valor deve ser positivo.")
+    # Botão de submissão do formulário
+    submitted = st.form_submit_button("Adicionar Despesa")
+    if submitted:
+        # Recuperamos a descrição do widget externo usando sua chave (st.session_state)
+        final_descricao = st.session_state.nova_despesa_descricao
+        
+        if not final_descricao.strip() or valor <= 0:
+            st.warning("A descrição é obrigatória e o valor deve ser positivo.")
         else:
-            # --- LÓGICA DE SANITIZAÇÃO DE ENTRADA ---
-            # Por padrão, consideramos um lançamento único.
+            # Lógica de salvamento (permanece a mesma)
             parcelas_final = parcelas_input
             recorrencia_freq_final = None
             recorrencia_vezes_final = 1
 
-            # DECISÃO: Se o usuário escolheu uma recorrência, ela tem prioridade.
             if recorrencia_freq_input != "Única" and recorrencia_vezes_input > 1:
-                # Estamos no modo RECORRÊNCIA
                 recorrencia_freq_final = recorrencia_freq_input
                 recorrencia_vezes_final = recorrencia_vezes_input
-                # Forçamos as parcelas para 1 para evitar conflito na lógica do backend.
                 parcelas_final = 1
             
-            # Se não for uma recorrência, usamos o valor das parcelas.
-            # O valor de recorrencia_freq_final já é None.
-            
-            # Chamada para o banco de dados com os dados JÁ LIMPOS E VALIDADOS.
             try:
                 database.insert_despesa(
                     user_id=user_id,
@@ -86,15 +95,17 @@ with st.form("form_nova_despesa"):
                     categoria=categoria,
                     tipo_pagamento=tipo_pagamento,
                     parcelas=parcelas_final,
-                    descricao=descricao.strip(),
+                    descricao=final_descricao.strip(),
                     recorrencia_freq=recorrencia_freq_final,
                     recorrencia_vezes=recorrencia_vezes_final
                 )
-                st.toast(f"Despesa '{descricao}' adicionada com sucesso!", icon="✅")
+                st.toast(f"Despesa '{final_descricao}' adicionada com sucesso!", icon="✅")
+                
+                # Limpa o campo de descrição após o sucesso
+                st.session_state.nova_despesa_descricao = ""
                 st.rerun()
             except Exception as e:
                 st.error(f"Ocorreu um erro ao salvar a despesa: {e}")
-
 
 st.markdown("---")
 despesas = database.get_despesas(user_id)
