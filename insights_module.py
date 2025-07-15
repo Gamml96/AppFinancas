@@ -85,7 +85,7 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
             - Dê uma sugestão prática ou um elogio, se apropriado.
             - NÃO invente dados. Baseie-se APENAS no resumo JSON fornecido.
             - Formate sua resposta de forma a ficar mais clara as informacoes, e lembre que estamos utilizando o streamlit para apresentar a resposta.
-            - IGNORE a categoria transferências."""
+            - NÃO CONSIDERE A categoria 'Transferências' na sua analise."""
         },
         {
             "role": "user",
