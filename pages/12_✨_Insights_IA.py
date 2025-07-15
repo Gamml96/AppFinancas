@@ -17,7 +17,7 @@ st.markdown("##### 1. Escolha o período da análise")
 
 # Define as datas padrão (últimos 30 dias)
 today = utils.get_local_today()
-start_date_default = today - relativedelta(month=1)
+start_date_default = today - relativedelta(days=30)
 
 col1, col2 = st.columns(2)
 with col1:
