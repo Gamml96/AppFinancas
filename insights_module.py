@@ -111,3 +111,85 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
         return chat_completion.choices[0].message.content
     except Exception as e:
         return f"Ocorreu um erro ao comunicar com a IA do Groq: {e}"
+    
+def gerar_query_sql_com_ia(user_id, pergunta, schema):
+    """
+    Usa a LLM para traduzir uma pergunta em linguagem natural para uma query SQL.
+    """
+    prompt_gerador_sql = f"""
+    Sua tarefa é agir como um especialista em SQL. Baseado no schema do banco de dados e na pergunta do usuário, gere uma ÚNICA query SQL que responda à pergunta.
+
+    REGRAS IMPORTANTES:
+    1.  Use APENAS as tabelas e colunas descritas no schema. Não invente colunas.
+    2.  A query DEVE ser apenas de leitura (começar com SELECT).
+    3.  SEMPRE filtre os resultados pelo 'user_id' fornecido para garantir a privacidade do usuário. O user_id é: {user_id}.
+    4.  Use o dialeto PostgreSQL.
+
+    SCHEMA DO BANCO DE DADOS:
+    ---
+    {schema}
+    ---
+
+    Pergunta do usuário: "{pergunta}"
+
+    Sua query SQL:
+    """
+    try:
+        client = OpenAI(api_key=st.secrets["groq"]["api_key"], base_url="https://api.groq.com/openai/v1")
+        response = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt_gerador_sql}],
+            model="llama3-70b-8192", # Usamos um modelo maior e mais capaz para gerar SQL
+            temperature=0.0,
+        )
+        # Extrai a query SQL da resposta da IA
+        query_gerada = response.choices[0].message.content.replace("```sql", "").replace("```", "").strip()
+        return query_gerada
+    except Exception as e:
+        print(f"Erro ao gerar SQL: {e}")
+        return None
+
+def responder_pergunta_do_usuario(user_id, pergunta):
+    """
+    Orquestra o processo Text-to-SQL:
+    1. Obtém o schema do banco.
+    2. Usa a IA para gerar a query SQL.
+    3. Executa a query de forma segura.
+    4. Usa a IA para gerar a resposta final em linguagem natural.
+    """
+    # 1. Obter o schema do banco
+    schema = database.get_full_database_schema()
+    
+    # 2. Gerar a query SQL
+    query_sql = gerar_query_sql_com_ia(user_id, pergunta, schema)
+    
+    if not query_sql:
+        return "Desculpe, não consegui traduzir sua pergunta em uma consulta ao banco de dados."
+
+    # 3. Executar a query de forma segura
+    try:
+        resultados = database.execute_generated_sql(query_sql)
+    except ValueError as ve: # Erro de segurança (ex: não é um SELECT)
+        return f"Erro de segurança: {ve}"
+    except Exception as e:
+        print(f"Erro ao executar SQL: {e}\nQuery: {query_sql}")
+        return "Ocorreu um erro ao buscar os dados para responder sua pergunta."
+
+    # 4. Gerar a resposta final com base nos resultados
+    prompt_final = f"""
+    Contexto: A pergunta do usuário foi '{pergunta}'. A consulta ao banco de dados retornou os seguintes dados em formato JSON:
+    {json.dumps(resultados, indent=2, default=str)}
+
+    Sua tarefa é analisar os dados do contexto e responder à pergunta do usuário de forma clara, amigável e em português.
+    Se os dados estiverem vazios, informe ao usuário que não foram encontrados resultados para a pergunta dele.
+    """
+    
+    try:
+        client = OpenAI(api_key=st.secrets["groq"]["api_key"], base_url="https://api.groq.com/openai/v1")
+        chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt_final}],
+            model="llama3-8b-8192", # Um modelo mais rápido é suficiente para formatar a resposta
+            temperature=0.7
+        )
+        return chat_completion.choices[0].message.content
+    except Exception as e:
+        return f"Ocorreu um erro ao gerar a resposta final: {e}"

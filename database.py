@@ -1001,3 +1001,52 @@ def get_financial_summary_for_ai(user_id, start_date, end_date):
         conn.close()
         
     return summary
+
+def get_full_database_schema():
+    """
+    Inspeciona o banco de dados e retorna uma string descrevendo o schema
+    de tabelas relevantes para as perguntas do usuário.
+    """
+    conn = _get_db_connection()
+    schema_info = ""
+    try:
+        with conn.cursor() as cur:
+            # Lista de tabelas que a IA pode consultar
+            tabelas = ['despesas', 'receitas', 'contas', 'categorias', 'orcamentos']
+            for tabela in tabelas:
+                schema_info += f"Tabela '{tabela}':\n"
+                # Usamos a view information_schema para obter os detalhes das colunas
+                cur.execute(f"""
+                    SELECT column_name, data_type 
+                    FROM information_schema.columns 
+                    WHERE table_name = '{tabela}';
+                """)
+                colunas = cur.fetchall()
+                for col in colunas:
+                    schema_info += f"  - {col[0]} ({col[1]})\n"
+                schema_info += "\n"
+    except Exception as e:
+        return f"Erro ao buscar schema: {e}"
+    finally:
+        conn.close()
+    return schema_info
+
+def execute_generated_sql(query, params=None):
+    """
+    Executa uma query SQL gerada pela IA de forma segura.
+    Retorna os resultados como uma lista de dicionários.
+    """
+    # Medida de segurança CRÍTICA: só permite queries de leitura.
+    if not query.strip().upper().startswith("SELECT"):
+        raise ValueError("Ação não permitida. Apenas consultas SELECT são autorizadas.")
+        
+    conn = _get_db_connection()
+    results = []
+    try:
+        # Usamos RealDictCursor para obter resultados como dicionários, mais fácil para a IA ler.
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(query, params)
+            results = cur.fetchall()
+    finally:
+        conn.close()
+    return results
