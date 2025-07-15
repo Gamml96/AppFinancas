@@ -3,6 +3,7 @@ import database
 import pandas as pd
 import datetime
 import utils
+import ai_module
 
 # --- Guarda de Autenticação ---
 profile, user_id, username, credentials, authenticator = utils.check_authentication()
@@ -21,6 +22,20 @@ categorias_list = [cat[1] for cat in categorias_despesa]
 with st.form("form_nova_despesa"):
     st.markdown("### Adicionar Nova Despesa")
     descricao = st.text_input("Descrição da Despesa")
+        # --- PONTO CENTRAL DA INTELIGÊNCIA ARTIFICIAL ---
+    # 1. Tenta prever a categoria com base no que foi digitado na descrição.
+    sugestao_categoria = None
+    if descricao:  # A previsão só acontece se o campo "Descrição" não estiver vazio.
+        # Chama a função do ai_module que carrega o modelo global e faz a previsão.
+        sugestao_categoria = ai_module.prever_categoria(descricao)
+
+    # 2. Prepara o selectbox para usar a sugestão da IA.
+    index_sugestao = 0  # O padrão é a primeira categoria da lista.
+    # Se a IA retornou uma sugestão válida e essa sugestão existe na lista de categorias do usuário...
+    if sugestao_categoria and sugestao_categoria in categorias_list:
+        # ...encontramos o índice dessa categoria para pré-selecioná-la.
+        index_sugestao = categorias_list.index(sugestao_categoria)
+    # --- FIM DA LÓGICA DE IA ---
     valor = st.number_input("Valor", min_value=0.01, format="%.2f", help="Para parcelas, insira o valor total da compra. Para recorrências, insira o valor de cada ocorrência.")
     data_compra = st.date_input("Data da Primeira Ocorrência/Compra", value=utils.get_local_today())
     categoria = st.selectbox("Categoria", options=categorias_list)
