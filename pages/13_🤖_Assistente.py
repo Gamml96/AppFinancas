@@ -35,3 +35,10 @@ if prompt := st.chat_input("Ex: Quanto gastei com gasolina este mês?"):
     
     # Adiciona a resposta da IA ao histórico
     st.session_state.messages.append({"role": "assistant", "content": response})
+
+st.markdown("---")
+with st.expander("🕵️‍♂️ Depuração: Ver Última Query SQL Executada"):
+    if "last_sql_query" in st.session_state:
+        st.code(st.session_state.last_sql_query, language="sql")
+    else:
+        st.info("Nenhuma query foi executada nesta sessão ainda.")
