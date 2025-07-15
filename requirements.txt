@@ -12,3 +12,4 @@ requests
 scikit-learn
 joblib
 google-generativeai
+openai
