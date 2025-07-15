@@ -126,134 +126,149 @@ with tab_despesas:
 
 with tab_simulacao:
     st.title("🎯 Simulador de Impacto de Despesas")
-    st.info("Verifique como uma nova despesa afetaria o seu fluxo de caixa futuro antes de a realizar.")
+
+    # Inicializa o estado da simulação na sessão
+    if 'simulation_results' not in st.session_state:
+        st.session_state.simulation_results = None
     
     # --- DADOS ATUAIS ---
-    # Busca o fluxo de caixa atual para usar como base da simulação.
     transacoes_atuais = database.get_transacoes_consolidadas(user_id, None)
     
     if not transacoes_atuais:
         st.warning("Você precisa ter transações registadas para poder usar o simulador.")
         st.stop()
     
-    df_atual = pd.DataFrame(transacoes_atuais, columns=["data", "descricao", "valor"])
-    df_atual["data"] = pd.to_datetime(df_atual["data"])
-    df_atual = df_atual.sort_values(by="data")
-    fluxo_diario_atual = df_atual.groupby('data')['valor'].sum().reset_index()
+    # Se não houver uma simulação ativa, mostra o formulário e a info inicial
+    if st.session_state.simulation_results is None:
+        st.info("Verifique como uma nova despesa afetaria o seu fluxo de caixa futuro antes de a realizar.")
     
-    # Expande para todos os dias e calcula o saldo acumulado
-    data_inicio_atual = fluxo_diario_atual['data'].min()
-    data_fim_atual = max(fluxo_diario_atual['data'].max(), pd.to_datetime(utils.get_local_today()))
-    todos_os_dias = pd.date_range(start=data_inicio_atual, end=data_fim_atual + relativedelta(years=1), freq='D')
-    df_completo_atual = fluxo_diario_atual.set_index('data').reindex(todos_os_dias, fill_value=0).reset_index().rename(columns={'index': 'data'})
-    df_completo_atual['saldo_acumulado_atual'] = df_completo_atual['valor'].cumsum()
+        st.markdown("---")
+        st.markdown("### 1. Insira os dados da nova despesa")
     
+        contas = database.get_contas(user_id)
+        contas_dict = {conta[1]: conta[0] for conta in contas}
+        contas_info = {conta[0]: conta for conta in contas}
     
-    # --- FORMULÁRIO DE SIMULAÇÃO ---
-    st.markdown("---")
-    st.markdown("### 1. Insira os dados da nova despesa")
+        with st.form("form_simulacao"):
+            col1, col2 = st.columns(2)
+            with col1:
+                descricao = st.text_input("Descrição da Despesa")
+                valor = st.number_input("Valor Total da Compra", min_value=0.01, format="%.2f")
+                data_compra = st.date_input("Data da Compra", value=utils.get_local_today())
+                conta_nome = st.selectbox("Conta que seria usada", options=list(contas_dict.keys()))
+            with col2:
+                tipo_pagamento = st.radio("Tipo de Pagamento", ["Crédito", "Débito"], horizontal=True)
+                parcelas = st.number_input("Número de Parcelas", min_value=1, step=1, value=1)
     
-    contas = database.get_contas(user_id)
-    contas_dict = {conta[1]: conta[0] for conta in contas}
-    contas_info = {conta[0]: conta for conta in contas} # Dicionário com informações completas
+            submitted = st.form_submit_button("Analisar Impacto Financeiro", type="primary")
     
-    with st.form("form_simulacao"):
-        col1, col2 = st.columns(2)
-        with col1:
-            descricao = st.text_input("Descrição da Despesa")
-            valor = st.number_input("Valor Total da Compra", min_value=0.01, format="%.2f")
-            data_compra = st.date_input("Data da Compra", value=utils.get_local_today())
-            conta_nome = st.selectbox("Conta que seria usada", options=list(contas_dict.keys()))
-        with col2:
-            tipo_pagamento = st.radio("Tipo de Pagamento", ["Crédito", "Débito"], horizontal=True)
-            parcelas = st.number_input("Número de Parcelas", min_value=1, step=1, value=1)
+            if submitted:
+                if not descricao.strip() or valor <= 0:
+                    st.error("Por favor, preencha a descrição e um valor válido para a simulação.")
+                else:
+                    # --- LÓGICA DA SIMULAÇÃO ---
+                    df_atual = pd.DataFrame(transacoes_atuais, columns=["data", "descricao", "valor"])
+                    df_atual["data"] = pd.to_datetime(df_atual["data"])
+                    df_atual = df_atual.sort_values(by="data")
+                    fluxo_diario_atual = df_atual.groupby('data')['valor'].sum().reset_index()
     
-        submitted = st.form_submit_button("Analisar Impacto Financeiro", type="primary")
+                    data_inicio_atual = fluxo_diario_atual['data'].min()
+                    data_fim_atual = max(fluxo_diario_atual['data'].max(), pd.to_datetime(utils.get_local_today()))
+                    todos_os_dias = pd.date_range(start=data_inicio_atual, end=data_fim_atual + relativedelta(years=1), freq='D')
+                    df_completo_atual = fluxo_diario_atual.set_index('data').reindex(todos_os_dias, fill_value=0).reset_index().rename(columns={'index': 'data'})
+                    df_completo_atual['saldo_acumulado_atual'] = df_completo_atual['valor'].cumsum()
     
-    # --- LÓGICA DA SIMULAÇÃO ---
-    if submitted:
-        if not descricao.strip() or valor <= 0:
-            st.error("Por favor, preencha a descrição e um valor válido para a simulação.")
-        else:
-            # 1. Gerar as transações simuladas em memória
-            despesas_simuladas = []
-            conta_id_selecionada = contas_dict[conta_nome]
-            valor_parcela_padrao = round(valor / parcelas, 2)
-            diferenca = round(valor - (valor_parcela_padrao * parcelas), 2)
+                    despesas_simuladas = []
+                    conta_id_selecionada = contas_dict[conta_nome]
+                    valor_parcela_padrao = round(valor / parcelas, 2)
+                    diferenca = round(valor - (valor_parcela_padrao * parcelas), 2)
     
-            # Determina o vencimento da primeira parcela
-            if tipo_pagamento == 'Crédito':
-                info_conta = contas_info[conta_id_selecionada]
-                vencimento_base = utils._calcular_vencimento_credito(data_compra, info_conta[2], info_conta[5])
-            else: # Débito
-                vencimento_base = data_compra
+                    if tipo_pagamento == 'Crédito':
+                        info_conta = contas_info[conta_id_selecionada]
+                        vencimento_base = utils._calcular_vencimento_credito(data_compra, info_conta[2], info_conta[5])
+                    else:
+                        vencimento_base = data_compra
     
-            for i in range(parcelas):
-                valor_parcela = (valor_parcela_padrao + diferenca) if i == 0 else valor_parcela_padrao
-                data_vencimento = vencimento_base + relativedelta(months=i)
-                despesas_simuladas.append({
-                    "data": data_vencimento,
-                    "descricao": f"[SIMULAÇÃO] {descricao} ({i+1}/{parcelas})",
-                    "valor": -valor_parcela # Despesa é negativa
-                })
-            
-            df_simulado = pd.DataFrame(despesas_simuladas)
-            df_simulado["data"] = pd.to_datetime(df_simulado["data"])
+                    for i in range(parcelas):
+                        valor_parcela = (valor_parcela_padrao + diferenca) if i == 0 else valor_parcela_padrao
+                        data_vencimento = vencimento_base + relativedelta(months=i)
+                        despesas_simuladas.append({
+                            "data": data_vencimento,
+                            "descricao": f"[SIMULAÇÃO] {descricao} ({i+1}/{parcelas})",
+                            "valor": -valor_parcela
+                        })
+                    
+                    df_simulado = pd.DataFrame(despesas_simuladas)
+                    df_simulado["data"] = pd.to_datetime(df_simulado["data"])
     
-            # 2. Combinar transações atuais com as simuladas
-            df_combinado = pd.concat([df_atual, df_simulado], ignore_index=True)
-            df_combinado = df_combinado.sort_values(by="data")
-            fluxo_diario_combinado = df_combinado.groupby('data')['valor'].sum().reset_index()
+                    df_combinado = pd.concat([df_atual, df_simulado], ignore_index=True)
+                    df_combinado = df_combinado.sort_values(by="data")
+                    fluxo_diario_combinado = df_combinado.groupby('data')['valor'].sum().reset_index()
     
-            # 3. Recalcular o fluxo de caixa completo e o saldo acumulado simulado
-            data_fim_combinado = max(fluxo_diario_combinado['data'].max(), pd.to_datetime(utils.get_local_today()))
-            todos_os_dias_combinado = pd.date_range(start=data_inicio_atual, end=data_fim_combinado + relativedelta(years=1), freq='D')
-            df_completo_simulado = fluxo_diario_combinado.set_index('data').reindex(todos_os_dias_combinado, fill_value=0).reset_index().rename(columns={'index': 'data'})
-            df_completo_simulado['saldo_acumulado_simulado'] = df_completo_simulado['valor'].cumsum()
+                    data_fim_combinado = max(fluxo_diario_combinado['data'].max(), pd.to_datetime(utils.get_local_today()))
+                    todos_os_dias_combinado = pd.date_range(start=data_inicio_atual, end=data_fim_combinado + relativedelta(years=1), freq='D')
+                    df_completo_simulado = fluxo_diario_combinado.set_index('data').reindex(todos_os_dias_combinado, fill_value=0).reset_index().rename(columns={'index': 'data'})
+                    df_completo_simulado['saldo_acumulado_simulado'] = df_completo_simulado['valor'].cumsum()
     
-            # 4. Juntar os dois cenários (atual e simulado) para visualização
-            df_final = pd.merge(df_completo_atual, df_completo_simulado[['data', 'saldo_acumulado_simulado']], on='data', how='left')
-            df_final['saldo_acumulado_simulado'] = df_final['saldo_acumulado_simulado'].fillna(method='ffill') # Preenche dias sem novas simulações
+                    df_final = pd.merge(df_completo_atual, df_completo_simulado[['data', 'saldo_acumulado_simulado']], on='data', how='left')
+                    df_final['saldo_acumulado_simulado'] = df_final['saldo_acumulado_simulado'].fillna(method='ffill')
+                    
+                    # Guarda os resultados no estado da sessão
+                    st.session_state.simulation_results = {
+                        "df_final": df_final,
+                        "df_simulado": df_simulado
+                    }
+                    st.rerun()
     
-            # --- EXIBIÇÃO DOS RESULTADOS ---
-            st.markdown("---")
-            st.markdown("### 2. Resultado da Simulação")
-            
-            saldo_negativo_df = df_final[df_final['saldo_acumulado_simulado'] < 0]
-            
+    # Se uma simulação foi executada, mostra os resultados
+    if st.session_state.simulation_results is not None:
+        results = st.session_state.simulation_results
+        df_final = results['df_final']
+        df_simulado = results['df_simulado']
+    
+        st.markdown("### 2. Resultado da Simulação")
+        
+        saldo_negativo_df = df_final[df_final['saldo_acumulado_simulado'] < 0]
+        
+        col_res, col_btn = st.columns([4, 1])
+    
+        with col_res:
             if not saldo_negativo_df.empty:
                 primeira_data_negativa = saldo_negativo_df['data'].iloc[0]
                 menor_saldo = saldo_negativo_df['saldo_acumulado_simulado'].min()
                 st.error(f"🚨 **Alerta de Risco!** Esta despesa tornaria o seu saldo negativo a partir de **{primeira_data_negativa.strftime('%d/%m/%Y')}**, atingindo um mínimo de **{utils.formatar_moeda_brl(menor_saldo)}**.", icon="🔥")
             else:
                 st.success("✅ **Análise Concluída:** A inclusão desta despesa **não** tornaria o seu saldo negativo no período analisado.", icon="👍")
-            
-            st.markdown("#### Comparativo do Fluxo de Caixa")
+        
+        with col_btn:
+            if st.button("🔄 Fazer Nova Simulação", use_container_width=True):
+                st.session_state.simulation_results = None
+                st.rerun()
     
-            fig = go.Figure()
-            # Linha do Saldo Atual
-            fig.add_trace(go.Scatter(x=df_final['data'], y=df_final['saldo_acumulado_atual'],
-                                mode='lines',
-                                name='Saldo Atual',
-                                line=dict(color='royalblue', width=2)))
-            # Linha do Saldo Simulado
-            fig.add_trace(go.Scatter(x=df_final['data'], y=df_final['saldo_acumulado_simulado'],
-                                mode='lines',
-                                name='Saldo Simulado (com a nova despesa)',
-                                line=dict(color='firebrick', width=2, dash='dash')))
+        st.markdown("#### Comparativo do Fluxo de Caixa")
     
-            fig.update_layout(
-                title_text='Evolução do Saldo Acumulado: Cenário Atual vs. Simulado',
-                xaxis_title='Data',
-                yaxis_title='Saldo Acumulado (R$)',
-                legend_title="Cenários"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df_final['data'], y=df_final['saldo_acumulado_atual'],
+                            mode='lines',
+                            name='Saldo Atual',
+                            line=dict(color='royalblue', width=2)))
+        fig.add_trace(go.Scatter(x=df_final['data'], y=df_final['saldo_acumulado_simulado'],
+                            mode='lines',
+                            name='Saldo Simulado (com a nova despesa)',
+                            line=dict(color='firebrick', width=2, dash='dash')))
     
-            st.markdown("---")
-            st.markdown("#### Detalhes das Parcelas Simuladas")
-            st.dataframe(df_simulado.rename(columns={
-                "data": "Data de Vencimento",
-                "descricao": "Descrição da Parcela",
-                "valor": "Valor da Parcela"
-            }).style.format({"Valor da Parcela": utils.formatar_moeda_brl}), hide_index=True, use_container_width=True)
+        fig.update_layout(
+            title_text='Evolução do Saldo Acumulado: Cenário Atual vs. Simulado',
+            xaxis_title='Data',
+            yaxis_title='Saldo Acumulado (R$)',
+            legend_title="Cenários"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+        st.markdown("---")
+        st.markdown("#### Detalhes das Parcelas Simuladas")
+        st.dataframe(df_simulado.rename(columns={
+            "data": "Data de Vencimento",
+            "descricao": "Descrição da Parcela",
+            "valor": "Valor da Parcela"
+        }).style.format({"Valor da Parcela": utils.formatar_moeda_brl}), hide_index=True, use_container_width=True)
