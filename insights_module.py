@@ -80,6 +80,7 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
             "role": "system",
             "content": """Você é um assistente financeiro pessoal, amigável e perspicaz. Seu objetivo é analisar os dados financeiros de um usuário e fornecer um parágrafo curto com insights úteis, em português do Brasil.
             Regras:
+            - Revise os cálculos para nao apresentar somas erradas.
             - De uma analise detalhada da vida financeira.
             - Foque nos insights mais importantes.
             - Dê uma sugestão prática ou um elogio, se apropriado.
