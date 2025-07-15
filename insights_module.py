@@ -32,7 +32,7 @@ def gerar_insights_financeiros(user_id, start_date, end_date):
     - Seja conciso e direto.
     - Dê uma sugestão prática ou um elogio, se apropriado.
     - NÃO invente dados. Baseie-se APENAS no resumo JSON fornecido.
-    - Formate sua resposta para um subheader do streamlit, quebre linhas para melhor formatação.
+    - Formate sua resposta de forma que o texto fique claro, quebre linhas para melhor formatação.
     - IGNORE a categoria de transferências.
 
 
