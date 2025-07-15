@@ -162,27 +162,6 @@ def gerar_query_sql_com_ia(user_id, pergunta, schema):
         print(f"Erro na API ao gerar SQL: {e}")
         return None
     
-Olá! Esta resposta da IA é um exemplo clássico do desafio em sistemas Text-to-SQL. A IA está a ser "educada" e a tentar dar uma resposta útil em vez de um erro técnico, mas o resultado final não é o esperado.
-
-A mensagem "não foi possível encontrar informações" indica que o fluxo completo funcionou (a IA gerou uma query SQL, a query foi executada), mas a consulta ao banco de dados retornou um resultado vazio.
-
-Isto pode acontecer por duas razões principais:
-
-Não existem dados: Pode ser que realmente não haja nenhuma despesa com "gasolina" registada neste mês.
-
-A Query SQL está errada: A IA pode ter gerado uma query que é sintaticamente válida, mas logicamente incorreta, não encontrando os dados que de facto existem. Por exemplo, pode ter filtrado a data errada ou procurado o texto de forma demasiado restritiva.
-
-Para resolver isto, precisamos de "abrir a caixa preta" e ver exatamente qual query a IA está a gerar.
-
-A Solução: Depurar a Query Gerada
-Vamos fazer uma pequena alteração no nosso insights_module.py para que, além de executar a query, ele também nos mostre qual foi a query gerada. Isto irá permitir-nos diagnosticar o problema de forma precisa.
-
-Substitua a função responder_pergunta_do_usuario no seu ficheiro insights_module.py pela versão abaixo.
-
-Python
-
-# Em insights_module.py, substitua a função existente
-
 def responder_pergunta_do_usuario(user_id, pergunta):
     """
     Orquestra o processo Text-to-SQL com depuração adicionada.
