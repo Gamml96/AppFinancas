@@ -962,3 +962,42 @@ def get_all_despesas_for_training():
         WHERE u.consent_ai_training = TRUE
     """
     return _execute_query(query, fetch='all')
+
+def get_financial_summary_for_ai(user_id):
+    """
+    Coleta um resumo dos dados financeiros do último mês para ser usado pela IA.
+    """
+    conn = _get_db_connection()
+    summary = {}
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # Gastos totais por categoria no último mês
+            cur.execute("""
+                SELECT categoria, SUM(valor) as total
+                FROM despesas
+                WHERE user_id = %s AND data_vencimento >= NOW() - INTERVAL '30 days'
+                GROUP BY categoria
+                ORDER BY total DESC;
+            """, (user_id,))
+            summary['gastos_recentes'] = cur.fetchall()
+
+            # Receitas totais no último mês
+            cur.execute("""
+                SELECT SUM(valor) as total
+                FROM receitas
+                WHERE user_id = %s AND data >= NOW() - INTERVAL '30 days';
+            """, (user_id,))
+            summary['receitas_recentes'] = cur.fetchone()['total'] or 0
+
+            # Orçamentos definidos pelo usuário
+            cur.execute("""
+                SELECT categoria_nome, limite_mensal
+                FROM orcamentos
+                WHERE user_id = %s;
+            """, (user_id,))
+            summary['orcamentos'] = cur.fetchall()
+            
+    finally:
+        conn.close()
+        
+    return summary

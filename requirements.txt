@@ -11,3 +11,4 @@ python-dotenv
 requests
 scikit-learn
 joblib
+google-generativeai
