@@ -153,8 +153,10 @@ def is_user_admin(username):
 
 @st.cache_data
 def get_user_profile(username):
-    user = _execute_query("SELECT user_id, name, email FROM users WHERE username = %s", (username,), fetch='one')
-    return {"user_id": user[0], "name": user[1], "email": user[2]} if user else None
+    # Selecionamos a nova coluna junto com as outras
+    user = _execute_query("SELECT user_id, name, email, consent_ai_training FROM users WHERE username = %s", (username,), fetch='one')
+    # Adicionamos o novo campo ao dicionário retornado
+    return {"user_id": user[0], "name": user[1], "email": user[2], "consent_ai_training": user[3]} if user else None
 
 @st.cache_data
 def get_authenticator_credentials():
@@ -189,6 +191,12 @@ def delete_user_financial_data(user_id):
     for query in queries:
         _execute_query(query, (user_id,), commit=True)
     st.cache_data.clear()
+
+def update_user_consent(user_id, consent_status):
+    """Atualiza a permissão de um usuário para o treinamento da IA."""
+    _execute_query("UPDATE users SET consent_ai_training = %s WHERE user_id = %s", (consent_status, user_id), commit=True)
+    st.cache_data.clear() # Limpa o cache para garantir que a próxima leitura de perfil pegue o novo valor
+
 
 # -------- Contas --------
 def insert_conta(user_id, nome, vencimento, data_inicial, saldo_inicial, fechamento):
@@ -941,3 +949,16 @@ def reabrir_operacao(operacao_id):
     
     st.cache_data.clear()
 
+# --- IA ---
+def get_all_despesas_for_training():
+    """
+    Busca as colunas 'Descrição' e 'Categoria' de todas as despesas de usuários
+    que deram consentimento para o uso de seus dados.
+    """
+    query = """
+        SELECT d.descricao, d.categoria
+        FROM despesas d
+        JOIN users u ON d.user_id = u.user_id
+        WHERE u.consent_ai_training = TRUE
+    """
+    return _execute_query(query, fetch='all')
