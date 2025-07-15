@@ -3,117 +3,257 @@ import database
 import pandas as pd
 import datetime
 import utils
+from dateutil.relativedelta import relativedelta
+import plotly.graph_objects as go
 
 # --- Guarda de Autenticação ---
 profile, user_id, username, credentials, authenticator = utils.check_authentication()
 
-# --- Conteúdo da Página ---
-contas = database.get_contas(user_id)
-categorias_despesa = database.get_categorias(user_id, "despesa")
+# --- Criação das Abas ---
+tab_despesas, tab_simulacao = st.tabs(["Inserir Despesa", "Simular Despesa"])
 
-st.title("Gerenciar Despesas")
-if not contas: st.warning("Cadastre uma conta para adicionar despesas."); 
-if not categorias_despesa: st.warning("Cadastre uma categoria de despesa para continuar."); 
-
-contas_dict = {conta[1]: conta[0] for conta in contas}
-categorias_list = [cat[1] for cat in categorias_despesa]
-
-with st.form("form_nova_despesa"):
-    st.markdown("### Adicionar Nova Despesa")
-    descricao = st.text_input("Descrição da Despesa")
-    valor = st.number_input("Valor", min_value=0.01, format="%.2f", help="Para parcelas, insira o valor total da compra. Para recorrências, insira o valor de cada ocorrência.")
-    data_compra = st.date_input("Data da Primeira Ocorrência/Compra", value=utils.get_local_today())
-    categoria = st.selectbox("Categoria", options=categorias_list)
-    conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()))
-
+with tab_despesas:
+    # --- Conteúdo da Página ---
+    contas = database.get_contas(user_id)
+    categorias_despesa = database.get_categorias(user_id, "despesa")
+    
+    st.title("Gerenciar Despesas")
+    if not contas: st.warning("Cadastre uma conta para adicionar despesas."); 
+    if not categorias_despesa: st.warning("Cadastre uma categoria de despesa para continuar."); 
+    
+    contas_dict = {conta[1]: conta[0] for conta in contas}
+    categorias_list = [cat[1] for cat in categorias_despesa]
+    
+    with st.form("form_nova_despesa"):
+        st.markdown("### Adicionar Nova Despesa")
+        descricao = st.text_input("Descrição da Despesa")
+        valor = st.number_input("Valor", min_value=0.01, format="%.2f", help="Para parcelas, insira o valor total da compra. Para recorrências, insira o valor de cada ocorrência.")
+        data_compra = st.date_input("Data da Primeira Ocorrência/Compra", value=utils.get_local_today())
+        categoria = st.selectbox("Categoria", options=categorias_list)
+        conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()))
+    
+        st.markdown("---")
+        st.markdown("#### Detalhes de Pagamento e Repetição")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_pagamento = st.radio("Tipo de Pagamento", ["Crédito", "Débito"], horizontal=True, key="tipo_pagamento")
+            # Ajustamos o help para maior clareza
+            parcelas_input = st.number_input("Nº de Parcelas", min_value=1, step=1, help="Para compras parceladas. Para assinaturas, use a Recorrência ao lado.")
+        
+        with col2:
+            recorrencia_freq_input = st.selectbox("Frequência da Recorrência", ["Única", "Diária", "Semanal", "Mensal", "Bimestral", "Trimestral", "Semestral", "Anual"], key="recorrencia_freq")
+            recorrencia_vezes_input = st.number_input("Repetir por (vezes)", min_value=1, step=1, help="Deixe 1 para um lançamento único.")
+    
+        if st.form_submit_button("Adicionar Despesa"):
+            if not descricao.strip() or valor <= 0:
+                st.warning("Descrição é obrigatória e o valor deve ser positivo.")
+            else:
+                # --- LÓGICA DE SANITIZAÇÃO DE ENTRADA ---
+                # Por padrão, consideramos um lançamento único.
+                parcelas_final = parcelas_input
+                recorrencia_freq_final = None
+                recorrencia_vezes_final = 1
+    
+                # DECISÃO: Se o usuário escolheu uma recorrência, ela tem prioridade.
+                if recorrencia_freq_input != "Única" and recorrencia_vezes_input > 1:
+                    # Estamos no modo RECORRÊNCIA
+                    recorrencia_freq_final = recorrencia_freq_input
+                    recorrencia_vezes_final = recorrencia_vezes_input
+                    # Forçamos as parcelas para 1 para evitar conflito na lógica do backend.
+                    parcelas_final = 1
+                
+                # Se não for uma recorrência, usamos o valor das parcelas.
+                # O valor de recorrencia_freq_final já é None.
+                
+                # Chamada para o banco de dados com os dados JÁ LIMPOS E VALIDADOS.
+                try:
+                    database.insert_despesa(
+                        user_id=user_id,
+                        conta_id=contas_dict[conta_nome],
+                        data_compra_str=data_compra.isoformat(),
+                        valor=valor,
+                        categoria=categoria,
+                        tipo_pagamento=tipo_pagamento,
+                        parcelas=parcelas_final,
+                        descricao=descricao.strip(),
+                        recorrencia_freq=recorrencia_freq_final,
+                        recorrencia_vezes=recorrencia_vezes_final
+                    )
+                    st.toast(f"Despesa '{descricao}' adicionada com sucesso!", icon="✅")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Ocorreu um erro ao salvar a despesa: {e}")
+    
+    
     st.markdown("---")
-    st.markdown("#### Detalhes de Pagamento e Repetição")
+    despesas = database.get_despesas(user_id)
+    if not despesas: st.info("Nenhuma despesa cadastrada."); 
     
-    col1, col2 = st.columns(2)
-    with col1:
-        tipo_pagamento = st.radio("Tipo de Pagamento", ["Crédito", "Débito"], horizontal=True, key="tipo_pagamento")
-        # Ajustamos o help para maior clareza
-        parcelas_input = st.number_input("Nº de Parcelas", min_value=1, step=1, help="Para compras parceladas. Para assinaturas, use a Recorrência ao lado.")
+    df = pd.DataFrame(despesas, columns=["ID", "user_id", "conta_id", "Data Compra", "Data Vencimento", "Valor", "Categoria", "Tipo", "Parcela", "Descrição", "Recorrência", "Grupo ID"])
+    df["Data Compra"] = pd.to_datetime(df["Data Compra"]).dt.date
+    df["Data Vencimento"] = pd.to_datetime(df["Data Vencimento"]).dt.date
+    df["Conta"] = df["conta_id"].map({v: k for k, v in contas_dict.items()})
+    df["Excluir"] = False
     
-    with col2:
-        recorrencia_freq_input = st.selectbox("Frequência da Recorrência", ["Única", "Diária", "Semanal", "Mensal", "Bimestral", "Trimestral", "Semestral", "Anual"], key="recorrencia_freq")
-        recorrencia_vezes_input = st.number_input("Repetir por (vezes)", min_value=1, step=1, help="Deixe 1 para um lançamento único.")
-
-    if st.form_submit_button("Adicionar Despesa"):
-        if not descricao.strip() or valor <= 0:
-            st.warning("Descrição é obrigatória e o valor deve ser positivo.")
+    st.markdown("### Despesas Lançadas")
+    st.warning("A edição na tabela afeta apenas a parcela individual. Para alterar a compra inteira, exclua as parcelas e adicione-a novamente.", icon="⚠️")
+    edited_df = st.data_editor(df, hide_index=True, use_container_width=True,
+        column_config={
+            "ID": None, "user_id": None, "conta_id": None, "Parcela": None, "Recorrência": None, "Grupo ID": None,
+            "Descrição": st.column_config.TextColumn(required=True),
+            "Tipo": st.column_config.SelectboxColumn(options=["Crédito", "Débito"], required=True),
+            "Valor": st.column_config.NumberColumn(format="R$ %.2f", required=True),
+            "Conta": st.column_config.SelectboxColumn(options=list(contas_dict.keys()), required=True),
+            "Categoria": st.column_config.SelectboxColumn(options=categorias_list, required=True),
+            "Data Compra": st.column_config.DateColumn(required=True),
+            "Data Vencimento": st.column_config.DateColumn(required=True)
+        }, key="despesas_editor")
+    
+    c1, c2 = st.columns(2)
+    if c1.button("Salvar Alterações em Despesas"):
+        for _, row in edited_df.iterrows():
+            database.update_despesa(int(row["ID"]), user_id, contas_dict[row["Conta"]], row["Data Compra"].isoformat(), row["Data Vencimento"].isoformat(), float(row["Valor"]), row["Categoria"], row["Descrição"])
+        st.toast("Despesas atualizadas!", icon="✅"); st.rerun()
+    
+    if c2.button("Excluir Despesas Selecionadas"):
+        selected = edited_df[edited_df["Excluir"]]
+        if not selected.empty:
+            for _, row in selected.iterrows(): database.delete_despesa(int(row["ID"]), user_id)
+            st.toast(f"{len(selected)} despesa(s) excluída(s)!", icon="🗑️"); st.rerun()
         else:
-            # --- LÓGICA DE SANITIZAÇÃO DE ENTRADA ---
-            # Por padrão, consideramos um lançamento único.
-            parcelas_final = parcelas_input
-            recorrencia_freq_final = None
-            recorrencia_vezes_final = 1
+            st.toast("Nenhuma despesa selecionada.", icon="⚠️")
 
-            # DECISÃO: Se o usuário escolheu uma recorrência, ela tem prioridade.
-            if recorrencia_freq_input != "Única" and recorrencia_vezes_input > 1:
-                # Estamos no modo RECORRÊNCIA
-                recorrencia_freq_final = recorrencia_freq_input
-                recorrencia_vezes_final = recorrencia_vezes_input
-                # Forçamos as parcelas para 1 para evitar conflito na lógica do backend.
-                parcelas_final = 1
+with tab_simulacao:
+    st.title("🎯 Simulador de Impacto de Despesas")
+    st.info("Verifique como uma nova despesa afetaria o seu fluxo de caixa futuro antes de a realizar.")
+    
+    # --- DADOS ATUAIS ---
+    # Busca o fluxo de caixa atual para usar como base da simulação.
+    transacoes_atuais = database.get_transacoes_consolidadas(user_id, None)
+    
+    if not transacoes_atuais:
+        st.warning("Você precisa ter transações registadas para poder usar o simulador.")
+        st.stop()
+    
+    df_atual = pd.DataFrame(transacoes_atuais, columns=["data", "descricao", "valor"])
+    df_atual["data"] = pd.to_datetime(df_atual["data"])
+    df_atual = df_atual.sort_values(by="data")
+    fluxo_diario_atual = df_atual.groupby('data')['valor'].sum().reset_index()
+    
+    # Expande para todos os dias e calcula o saldo acumulado
+    data_inicio_atual = fluxo_diario_atual['data'].min()
+    data_fim_atual = max(fluxo_diario_atual['data'].max(), pd.to_datetime(utils.get_local_today()))
+    todos_os_dias = pd.date_range(start=data_inicio_atual, end=data_fim_atual + relativedelta(years=1), freq='D')
+    df_completo_atual = fluxo_diario_atual.set_index('data').reindex(todos_os_dias, fill_value=0).reset_index().rename(columns={'index': 'data'})
+    df_completo_atual['saldo_acumulado_atual'] = df_completo_atual['valor'].cumsum()
+    
+    
+    # --- FORMULÁRIO DE SIMULAÇÃO ---
+    st.markdown("---")
+    st.markdown("### 1. Insira os dados da nova despesa")
+    
+    contas = database.get_contas(user_id)
+    contas_dict = {conta[1]: conta[0] for conta in contas}
+    contas_info = {conta[0]: conta for conta in contas} # Dicionário com informações completas
+    
+    with st.form("form_simulacao"):
+        col1, col2 = st.columns(2)
+        with col1:
+            descricao = st.text_input("Descrição da Despesa")
+            valor = st.number_input("Valor Total da Compra", min_value=0.01, format="%.2f")
+            data_compra = st.date_input("Data da Compra", value=utils.get_local_today())
+            conta_nome = st.selectbox("Conta que seria usada", options=list(contas_dict.keys()))
+        with col2:
+            tipo_pagamento = st.radio("Tipo de Pagamento", ["Crédito", "Débito"], horizontal=True)
+            parcelas = st.number_input("Número de Parcelas", min_value=1, step=1, value=1)
+    
+        submitted = st.form_submit_button("Analisar Impacto Financeiro", type="primary")
+    
+    # --- LÓGICA DA SIMULAÇÃO ---
+    if submitted:
+        if not descricao.strip() or valor <= 0:
+            st.error("Por favor, preencha a descrição e um valor válido para a simulação.")
+        else:
+            # 1. Gerar as transações simuladas em memória
+            despesas_simuladas = []
+            conta_id_selecionada = contas_dict[conta_nome]
+            valor_parcela_padrao = round(valor / parcelas, 2)
+            diferenca = round(valor - (valor_parcela_padrao * parcelas), 2)
+    
+            # Determina o vencimento da primeira parcela
+            if tipo_pagamento == 'Crédito':
+                info_conta = contas_info[conta_id_selecionada]
+                vencimento_base = utils._calcular_vencimento_credito(data_compra, info_conta[2], info_conta[5])
+            else: # Débito
+                vencimento_base = data_compra
+    
+            for i in range(parcelas):
+                valor_parcela = (valor_parcela_padrao + diferenca) if i == 0 else valor_parcela_padrao
+                data_vencimento = vencimento_base + relativedelta(months=i)
+                despesas_simuladas.append({
+                    "data": data_vencimento,
+                    "descricao": f"[SIMULAÇÃO] {descricao} ({i+1}/{parcelas})",
+                    "valor": -valor_parcela # Despesa é negativa
+                })
             
-            # Se não for uma recorrência, usamos o valor das parcelas.
-            # O valor de recorrencia_freq_final já é None.
+            df_simulado = pd.DataFrame(despesas_simuladas)
+            df_simulado["data"] = pd.to_datetime(df_simulado["data"])
+    
+            # 2. Combinar transações atuais com as simuladas
+            df_combinado = pd.concat([df_atual, df_simulado], ignore_index=True)
+            df_combinado = df_combinado.sort_values(by="data")
+            fluxo_diario_combinado = df_combinado.groupby('data')['valor'].sum().reset_index()
+    
+            # 3. Recalcular o fluxo de caixa completo e o saldo acumulado simulado
+            data_fim_combinado = max(fluxo_diario_combinado['data'].max(), pd.to_datetime(utils.get_local_today()))
+            todos_os_dias_combinado = pd.date_range(start=data_inicio_atual, end=data_fim_combinado + relativedelta(years=1), freq='D')
+            df_completo_simulado = fluxo_diario_combinado.set_index('data').reindex(todos_os_dias_combinado, fill_value=0).reset_index().rename(columns={'index': 'data'})
+            df_completo_simulado['saldo_acumulado_simulado'] = df_completo_simulado['valor'].cumsum()
+    
+            # 4. Juntar os dois cenários (atual e simulado) para visualização
+            df_final = pd.merge(df_completo_atual, df_completo_simulado[['data', 'saldo_acumulado_simulado']], on='data', how='left')
+            df_final['saldo_acumulado_simulado'] = df_final['saldo_acumulado_simulado'].fillna(method='ffill') # Preenche dias sem novas simulações
+    
+            # --- EXIBIÇÃO DOS RESULTADOS ---
+            st.markdown("---")
+            st.markdown("### 2. Resultado da Simulação")
             
-            # Chamada para o banco de dados com os dados JÁ LIMPOS E VALIDADOS.
-            try:
-                database.insert_despesa(
-                    user_id=user_id,
-                    conta_id=contas_dict[conta_nome],
-                    data_compra_str=data_compra.isoformat(),
-                    valor=valor,
-                    categoria=categoria,
-                    tipo_pagamento=tipo_pagamento,
-                    parcelas=parcelas_final,
-                    descricao=descricao.strip(),
-                    recorrencia_freq=recorrencia_freq_final,
-                    recorrencia_vezes=recorrencia_vezes_final
-                )
-                st.toast(f"Despesa '{descricao}' adicionada com sucesso!", icon="✅")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Ocorreu um erro ao salvar a despesa: {e}")
-
-
-st.markdown("---")
-despesas = database.get_despesas(user_id)
-if not despesas: st.info("Nenhuma despesa cadastrada."); 
-
-df = pd.DataFrame(despesas, columns=["ID", "user_id", "conta_id", "Data Compra", "Data Vencimento", "Valor", "Categoria", "Tipo", "Parcela", "Descrição", "Recorrência", "Grupo ID"])
-df["Data Compra"] = pd.to_datetime(df["Data Compra"]).dt.date
-df["Data Vencimento"] = pd.to_datetime(df["Data Vencimento"]).dt.date
-df["Conta"] = df["conta_id"].map({v: k for k, v in contas_dict.items()})
-df["Excluir"] = False
-
-st.markdown("### Despesas Lançadas")
-st.warning("A edição na tabela afeta apenas a parcela individual. Para alterar a compra inteira, exclua as parcelas e adicione-a novamente.", icon="⚠️")
-edited_df = st.data_editor(df, hide_index=True, use_container_width=True,
-    column_config={
-        "ID": None, "user_id": None, "conta_id": None, "Parcela": None, "Recorrência": None, "Grupo ID": None,
-        "Descrição": st.column_config.TextColumn(required=True),
-        "Tipo": st.column_config.SelectboxColumn(options=["Crédito", "Débito"], required=True),
-        "Valor": st.column_config.NumberColumn(format="R$ %.2f", required=True),
-        "Conta": st.column_config.SelectboxColumn(options=list(contas_dict.keys()), required=True),
-        "Categoria": st.column_config.SelectboxColumn(options=categorias_list, required=True),
-        "Data Compra": st.column_config.DateColumn(required=True),
-        "Data Vencimento": st.column_config.DateColumn(required=True)
-    }, key="despesas_editor")
-
-c1, c2 = st.columns(2)
-if c1.button("Salvar Alterações em Despesas"):
-    for _, row in edited_df.iterrows():
-        database.update_despesa(int(row["ID"]), user_id, contas_dict[row["Conta"]], row["Data Compra"].isoformat(), row["Data Vencimento"].isoformat(), float(row["Valor"]), row["Categoria"], row["Descrição"])
-    st.toast("Despesas atualizadas!", icon="✅"); st.rerun()
-
-if c2.button("Excluir Despesas Selecionadas"):
-    selected = edited_df[edited_df["Excluir"]]
-    if not selected.empty:
-        for _, row in selected.iterrows(): database.delete_despesa(int(row["ID"]), user_id)
-        st.toast(f"{len(selected)} despesa(s) excluída(s)!", icon="🗑️"); st.rerun()
-    else:
-        st.toast("Nenhuma despesa selecionada.", icon="⚠️")
+            saldo_negativo_df = df_final[df_final['saldo_acumulado_simulado'] < 0]
+            
+            if not saldo_negativo_df.empty:
+                primeira_data_negativa = saldo_negativo_df['data'].iloc[0]
+                menor_saldo = saldo_negativo_df['saldo_acumulado_simulado'].min()
+                st.error(f"🚨 **Alerta de Risco!** Esta despesa tornaria o seu saldo negativo a partir de **{primeira_data_negativa.strftime('%d/%m/%Y')}**, atingindo um mínimo de **{utils.formatar_moeda_brl(menor_saldo)}**.", icon="🔥")
+            else:
+                st.success("✅ **Análise Concluída:** A inclusão desta despesa **não** tornaria o seu saldo negativo no período analisado.", icon="👍")
+            
+            st.markdown("#### Comparativo do Fluxo de Caixa")
+    
+            fig = go.Figure()
+            # Linha do Saldo Atual
+            fig.add_trace(go.Scatter(x=df_final['data'], y=df_final['saldo_acumulado_atual'],
+                                mode='lines',
+                                name='Saldo Atual',
+                                line=dict(color='royalblue', width=2)))
+            # Linha do Saldo Simulado
+            fig.add_trace(go.Scatter(x=df_final['data'], y=df_final['saldo_acumulado_simulado'],
+                                mode='lines',
+                                name='Saldo Simulado (com a nova despesa)',
+                                line=dict(color='firebrick', width=2, dash='dash')))
+    
+            fig.update_layout(
+                title_text='Evolução do Saldo Acumulado: Cenário Atual vs. Simulado',
+                xaxis_title='Data',
+                yaxis_title='Saldo Acumulado (R$)',
+                legend_title="Cenários"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+    
+            st.markdown("---")
+            st.markdown("#### Detalhes das Parcelas Simuladas")
+            st.dataframe(df_simulado.rename(columns={
+                "data": "Data de Vencimento",
+                "descricao": "Descrição da Parcela",
+                "valor": "Valor da Parcela"
+            }).style.format({"Valor da Parcela": utils.formatar_moeda_brl}), hide_index=True, use_container_width=True)
