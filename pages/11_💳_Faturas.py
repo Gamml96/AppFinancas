@@ -52,7 +52,7 @@ st.markdown("### Detalhes da Fatura Selecionada")
 with col2:
     # Movemos o seletor de mês para a segunda coluna ao lado do nome do cartão
     meses_anos = sorted(list(set([(utils.get_local_today() + relativedelta(months=i)).strftime("%Y-%m") for i in range(-12, 13)])), reverse=True)
-    mes_ano_atual = utils.get_local_today() + relativedelta(months=1).strftime("%Y-%m")
+    mes_ano_atual = (utils.get_local_today() + relativedelta(months=1)).strftime("%Y-%m")
     mes_ano_selecionado = st.selectbox("Ver Fatura de:", options=meses_anos, index=meses_anos.index(mes_ano_atual))
 
 ano, mes = map(int, mes_ano_selecionado.split('-'))
