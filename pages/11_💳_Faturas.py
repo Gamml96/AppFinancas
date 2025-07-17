@@ -51,7 +51,7 @@ st.markdown("### Detalhes da Fatura Selecionada")
 # Gera uma lista de meses e anos para o selectbox de detalhe
 with col2:
     # Movemos o seletor de mês para a segunda coluna ao lado do nome do cartão
-    meses_anos = sorted(list(set([(utils.get_local_today() + relativedelta(months=i)).strftime("%Y-%m") for i in range(-12, 12)])), reverse=True)
+    meses_anos = sorted(list(set([(utils.get_local_today() + relativedelta(months=i)).strftime("%Y-%m") for i in range(-12, 2)])), reverse=True)
     mes_ano_selecionado = st.selectbox("Ver Fatura de:", options=meses_anos)
 
 ano, mes = map(int, mes_ano_selecionado.split('-'))
