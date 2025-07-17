@@ -52,7 +52,6 @@ st.markdown("### Detalhes da Fatura Selecionada")
 with col2:
     # Movemos o seletor de mês para a segunda coluna ao lado do nome do cartão
     meses_anos = sorted(list(set([(utils.get_local_today() + relativedelta(months=i)).strftime("%Y-%m") for i in range(-12, 13)])), reverse=True)
-    st.write(meses_anos)
     mes_ano_selecionado = st.selectbox("Ver Fatura de:", options=meses_anos)
 
 ano, mes = map(int, mes_ano_selecionado.split('-'))
@@ -78,3 +77,4 @@ else:
             "Valor": st.column_config.NumberColumn(format="R$ %.2f")
         }
     )
+st.write(meses_anos)
