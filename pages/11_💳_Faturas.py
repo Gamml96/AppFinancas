@@ -67,7 +67,7 @@ else:
     
     valor_total_fatura = df_fatura['Valor'].sum()
 
-    st.metric(f"Valor Total da Fatura de {mes:02d}/{ano}", f"R$ {utils.formatar_moeda_brl(valor_total_fatura)}")
+    st.metric(f"Valor Total da Fatura de {mes:02d}/{ano}", f" {utils.formatar_moeda_brl(valor_total_fatura)}")
     
     st.dataframe(
         df_fatura,
