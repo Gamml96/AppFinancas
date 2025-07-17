@@ -3,7 +3,6 @@ import database
 import pandas as pd
 import datetime
 import utils
-import datetime
 from dateutil.relativedelta import relativedelta
 
 # --- Guarda de Autenticação ---
@@ -57,6 +56,24 @@ def gerar_template_csv_investimentos():
     df_template = pd.DataFrame(template_data)
     return df_template.to_csv(index=False, sep=';').encode('utf-8')
 
+# --- NOVA FUNÇÃO ---
+@st.cache_data
+def gerar_template_csv_operacoes_estruturadas():
+    """Cria um DataFrame de exemplo para operações estruturadas."""
+    template_data = {
+        'id_estrategia': [1, 1],
+        'ativo_subjacente': ['PETR4', 'PETR4'],
+        'nome_estrategia': ['Trava de Alta com Call', 'Trava de Alta com Call'],
+        'data_montagem': ['17/07/2025', '17/07/2025'],
+        'codigo_opcao': ['PETRG100', 'PETRG120'],
+        'tipo_operacao': ['compra', 'venda'],
+        'strike': ['40.00', '42.00'],
+        'quantidade': [100, 100],
+        'preco_entrada': ['1.50', '0.50'],
+        'data_vencimento': ['20/08/2025', '20/08/2025']
+    }
+    df_template = pd.DataFrame(template_data)
+    return df_template.to_csv(index=False, sep=';').encode('utf-8')
 
 # --- FUNÇÕES DE PROCESSAMENTO OTIMIZADAS ---
 
@@ -140,7 +157,7 @@ def processar_importacao_despesas(df, user_id, contas):
                 raise ValueError(f"A conta '{row['conta']}' não foi encontrada em seu cadastro. Verifique o nome ou cadastre-a primeiro.")
 
             categoria_nome = str(row['categoria'])
-            tipo_pagamento = str(row['tipo_pagamento']).lower()
+            tipo_pagamento = str(row['tipo_pagamento'])
             if tipo_pagamento not in ['Crédito', 'Débito']:
                 raise ValueError("O 'tipo_pagamento' deve ser 'Crédito' ou 'Débito'.")
 
@@ -224,7 +241,7 @@ def processar_importacao_investimentos(df, user_id):
 
             # Chama a nova função que pode receber todos os parâmetros
             investimento_id = database.get_or_create_investimento(
-                user_id, codigo_ativo, tipo_ativo, descricao, 
+                user_id, codigo_ativo, tipo_ativo, descricao,
                 indexador, taxa_percentual, data_vencimento
             )
             
@@ -241,11 +258,71 @@ def processar_importacao_investimentos(df, user_id):
         st.error(f"{len(erros)} linhas não puderam ser importadas:")
         with st.expander("Ver detalhes dos erros"): [st.write(erro) for erro in erros]
 
+
+# --- NOVA FUNÇÃO ---
+def processar_importacao_operacoes_estruturadas(df, user_id):
+    """Processa o upload de um CSV com operações estruturadas e suas pernas."""
+    erros = []
+    sucessos = 0
+
+    colunas_necessarias = [
+        'id_estrategia', 'ativo_subjacente', 'nome_estrategia', 'data_montagem',
+        'codigo_opcao', 'tipo_operacao', 'strike', 'quantidade', 'preco_entrada',
+        'data_vencimento'
+    ]
+    if not all(col in df.columns for col in colunas_necessarias):
+        st.error(f"O arquivo enviado não contém todas as colunas necessárias. Verifique o template.")
+        return
+
+    # Agrupa o DataFrame pelo ID da estratégia
+    for id_estrategia, group in df.groupby('id_estrategia'):
+        try:
+            # Pega os dados da operação (que são os mesmos para todas as linhas do grupo)
+            primeira_perna = group.iloc[0]
+            ativo_subjacente = str(primeira_perna['ativo_subjacente'])
+            nome_estrategia = str(primeira_perna['nome_estrategia'])
+            data_montagem = pd.to_datetime(primeira_perna['data_montagem'], dayfirst=True).date()
+
+            pernas = []
+            for index, row in group.iterrows():
+                perna = {
+                    "codigo_opcao": str(row['codigo_opcao']),
+                    "tipo_opcao": "CALL" if 'C' in str(row['codigo_opcao']).upper() else "PUT",
+                    "tipo_operacao": str(row['tipo_operacao']).lower(),
+                    "strike": float(str(row['strike']).replace(",", ".")),
+                    "quantidade": int(row['quantidade']),
+                    "preco_entrada": float(str(row['preco_entrada']).replace(",", ".")),
+                    "data_vencimento": pd.to_datetime(row['data_vencimento'], dayfirst=True).date()
+                }
+                # Validação básica
+                if perna['tipo_operacao'] not in ['compra', 'venda']:
+                    raise ValueError(f"Tipo de operação inválido na linha {index+2}: {perna['tipo_operacao']}")
+                pernas.append(perna)
+
+            # Envia para o banco de dados
+            database.add_operacao_estruturada(
+                user_id, ativo_subjacente.upper(), nome_estrategia, data_montagem.isoformat(), pernas
+            )
+            sucessos += 1
+
+        except Exception as e:
+            erros.append(f"Estratégia ID '{id_estrategia}': Erro -> {e}")
+
+    if sucessos > 0:
+        st.success(f"{sucessos} operação(ões) estruturada(s) importada(s) com sucesso!")
+    if erros:
+        st.error(f"{len(erros)} operações não puderam ser importadas:")
+        with st.expander("Ver detalhes dos erros"):
+            for erro in erros:
+                st.write(erro)
+
 # --- Conteúdo da Página ---
 contas = database.get_contas(user_id)
 st.title("Importar Transações")
 
-tab_despesas, tab_receitas, tab_investimentos = st.tabs(["Importar Despesas", "Importar Receitas", "Importar Investimentos"])
+tab_despesas, tab_receitas, tab_investimentos, tab_operacoes = st.tabs([
+    "Importar Despesas", "Importar Receitas", "Importar Investimentos", "Importar Operações Estruturadas"
+])
 
 with tab_despesas:
     st.markdown("### 1. Baixe e Preencha o Template de Despesas")
@@ -266,7 +343,6 @@ with tab_despesas:
             st.dataframe(df_upload.head())
             if st.button("Confirmar e Iniciar Importação de Despesas", type="primary"):
                 processar_importacao_despesas(df_upload, user_id, contas)
-                # st.rerun() foi REMOVIDO
         except Exception as e:
             st.error(f"Erro ao ler o arquivo de despesas: {e}.")
 
@@ -289,13 +365,11 @@ with tab_receitas:
             st.dataframe(df_upload.head())
             if st.button("Confirmar e Iniciar Importação de Receitas", type="primary", key="btn_import_receitas"):
                 processar_importacao_receitas(df_upload, user_id, contas)
-                # st.rerun() foi REMOVIDO
         except Exception as e:
             st.error(f"Erro ao ler o arquivo de receitas: {e}.")
 
 with tab_investimentos:
     st.markdown("### 1. Baixe e Preencha o Template de Investimentos")
-    # Pequeno ajuste no texto para refletir a nova funcionalidade
     st.info("Use este modelo para importar suas transações. Ativos não encontrados serão cadastrados automaticamente.")
     st.download_button(
         label="Baixar Template de Investimentos",
@@ -313,6 +387,32 @@ with tab_investimentos:
             st.dataframe(df_upload.head())
             if st.button("Confirmar e Iniciar Importação de Investimentos", type="primary", key="btn_import_inv"):
                 processar_importacao_investimentos(df_upload, user_id)
-                # st.rerun() foi REMOVIDO
         except Exception as e:
             st.error(f"Erro ao ler o arquivo de investimentos: {e}.")
+
+# --- NOVA ABA ---
+with tab_operacoes:
+    st.markdown("### 1. Baixe e Preencha o Template de Operações Estruturadas")
+    st.info(
+        "Use este modelo para importar operações com múltiplas pernas. "
+        "**Linhas com o mesmo `id_estrategia` serão agrupadas na mesma operação.** "
+        "Os nomes das colunas não devem ser alterados."
+    )
+    st.download_button(
+        label="Baixar Template de Operações",
+        data=gerar_template_csv_operacoes_estruturadas(),
+        file_name="template_operacoes_estruturadas.csv",
+        mime="text/csv",
+    )
+    st.markdown("---")
+    st.markdown("### 2. Faça o Upload do Arquivo Preenchido")
+    uploaded_file_operacoes = st.file_uploader("Escolha um arquivo CSV de operações", type="csv", key="uploader_operacoes")
+    if uploaded_file_operacoes is not None:
+        try:
+            df_upload = pd.read_csv(uploaded_file_operacoes, sep=';')
+            st.success("Arquivo de operações carregado:")
+            st.dataframe(df_upload.head())
+            if st.button("Confirmar e Iniciar Importação de Operações", type="primary", key="btn_import_ops"):
+                processar_importacao_operacoes_estruturadas(df_upload, user_id)
+        except Exception as e:
+            st.error(f"Erro ao ler o arquivo de operações: {e}.")
