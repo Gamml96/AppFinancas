@@ -546,42 +546,50 @@ def add_transacao_investimento(investimento_id, tipo_transacao, data, quantidade
 # --- NOVA FUNÇÃO HELPER PARA O CÁLCULO FIFO ---
 def _calculate_fifo_position(transactions):
     """
-    Calcula a posição final e o preço médio de compra usando o método FIFO.
+    Calcula a posição final e o preço médio de compra usando o método FIFO,
+    com tolerância para erros de ponto flutuante.
     'transactions' é uma lista de tuplas (tipo_transacao, data, quantidade, preco_unitario).
     """
-    compras = deque() # Usamos uma deque (fila) para performance ao remover o primeiro item
+    compras = deque()
+    # A ordenação já é garantida pela query que busca as transações
     
-    # Ordena as transações por data para garantir a ordem correta
-    transactions.sort(key=lambda x: x[1])
+    # Epsilon para lidar com a imprecisão de ponto flutuante
+    epsilon = 1e-9
 
     for tipo, data, qtd, preco in transactions:
         if tipo == 'compra':
-            # Adiciona um novo lote de compra à fila
-            compras.append({'quantidade': qtd, 'preco_unitario': preco})
+            # Garante que os dados são do tipo float para os cálculos
+            compras.append({'quantidade': float(qtd), 'preco_unitario': float(preco)})
         elif tipo == 'venda':
-            qtd_a_vender = qtd
-            while qtd_a_vender > 0 and compras:
-                # Pega o lote mais antigo (primeiro a entrar)
+            qtd_a_vender = float(qtd)
+            # O loop continua enquanto a quantidade a vender for significativamente maior que zero
+            while qtd_a_vender > epsilon and compras:
                 lote_mais_antigo = compras[0]
                 
-                if lote_mais_antigo['quantidade'] <= qtd_a_vender:
-                    # Se a venda consome o lote inteiro (ou mais)
+                # Comparamos com uma tolerância (epsilon)
+                if lote_mais_antigo['quantidade'] <= qtd_a_vender + epsilon:
+                    # A venda consome o lote inteiro
                     qtd_a_vender -= lote_mais_antigo['quantidade']
-                    compras.popleft() # Remove o lote mais antigo da fila
+                    compras.popleft()
                 else:
-                    # Se a venda consome apenas parte do lote
+                    # A venda consome parte do lote
                     lote_mais_antigo['quantidade'] -= qtd_a_vender
                     qtd_a_vender = 0
     
-    # Depois de processar todas as vendas, o que sobrou em 'compras' é a posição atual
     if not compras:
-        return 0, 0 # Posição zerada
+        return 0, 0
 
     quantidade_total_final = sum(lote['quantidade'] for lote in compras)
+    
+    # Se a quantidade restante for insignificante, consideramos zerada
+    if quantidade_total_final < epsilon:
+        return 0, 0
+
     custo_total_final = sum(lote['quantidade'] * lote['preco_unitario'] for lote in compras)
     
+    # Evita divisão por zero se, por algum motivo, a quantidade final for zero
     if quantidade_total_final == 0:
-        return 0, 0
+         return 0, 0
 
     preco_medio_fifo = custo_total_final / quantidade_total_final
     return quantidade_total_final, preco_medio_fifo
