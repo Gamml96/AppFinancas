@@ -9,6 +9,7 @@ import os
 from dotenv import load_dotenv
 import utils
 import time
+from collections import deque # Importa a estrutura de dados 'deque'
 
 # --- FUNÇÃO CENTRAL DE CONEXÃO ---
 def _get_db_connection():
@@ -542,30 +543,95 @@ def add_transacao_investimento(investimento_id, tipo_transacao, data, quantidade
     _execute_query(query, params, commit=True)
     st.cache_data.clear()
 
+# --- NOVA FUNÇÃO HELPER PARA O CÁLCULO FIFO ---
+def _calculate_fifo_position(transactions):
+    """
+    Calcula a posição final e o preço médio de compra usando o método FIFO.
+    'transactions' é uma lista de tuplas (tipo_transacao, data, quantidade, preco_unitario).
+    """
+    compras = deque() # Usamos uma deque (fila) para performance ao remover o primeiro item
+    
+    # Ordena as transações por data para garantir a ordem correta
+    transactions.sort(key=lambda x: x[1])
+
+    for tipo, data, qtd, preco in transactions:
+        if tipo == 'compra':
+            # Adiciona um novo lote de compra à fila
+            compras.append({'quantidade': qtd, 'preco_unitario': preco})
+        elif tipo == 'venda':
+            qtd_a_vender = qtd
+            while qtd_a_vender > 0 and compras:
+                # Pega o lote mais antigo (primeiro a entrar)
+                lote_mais_antigo = compras[0]
+                
+                if lote_mais_antigo['quantidade'] <= qtd_a_vender:
+                    # Se a venda consome o lote inteiro (ou mais)
+                    qtd_a_vender -= lote_mais_antigo['quantidade']
+                    compras.popleft() # Remove o lote mais antigo da fila
+                else:
+                    # Se a venda consome apenas parte do lote
+                    lote_mais_antigo['quantidade'] -= qtd_a_vender
+                    qtd_a_vender = 0
+    
+    # Depois de processar todas as vendas, o que sobrou em 'compras' é a posição atual
+    if not compras:
+        return 0, 0 # Posição zerada
+
+    quantidade_total_final = sum(lote['quantidade'] for lote in compras)
+    custo_total_final = sum(lote['quantidade'] * lote['preco_unitario'] for lote in compras)
+    
+    if quantidade_total_final == 0:
+        return 0, 0
+
+    preco_medio_fifo = custo_total_final / quantidade_total_final
+    return quantidade_total_final, preco_medio_fifo
+
 @st.cache_data
 def get_portfolio_consolidado(user_id):
     """
-    Calcula a posição atual de cada ativo do usuário, mostrando apenas ativos
-    que possuem transações e cuja posição atual é maior que zero.
+    Calcula a posição atual de cada ativo do usuário usando o método FIFO.
+    Esta função agora é procedural e não depende de uma única query complexa.
     """
-    # A query agora usa INNER JOIN para excluir ativos sem transações
-    # e tem um HAVING simplificado para mostrar apenas posições > 0.
-    query = """
-        SELECT
-            i.investimento_id, i.codigo, i.descricao, ti.nome as tipo,
-            SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) as quantidade_total,
-            SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade * t.preco_unitario ELSE 0 END) / NULLIF(SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE 0 END), 0) as preco_medio_compra,
-            i.indexador, i.taxa_percentual, i.data_vencimento
-        FROM investimentos i
-        INNER JOIN transacoes_investimento t ON i.investimento_id = t.investimento_id
-        JOIN tipos_investimento ti ON i.tipo_id = ti.tipo_id
-        WHERE i.user_id = %s
-        GROUP BY i.investimento_id, i.codigo, i.descricao, ti.nome
-        HAVING SUM(CASE WHEN t.tipo_transacao = 'compra' THEN t.quantidade ELSE -t.quantidade END) > 0.00000001
-        ORDER BY i.codigo
-    """
-    # Usamos _execute_query que já foi refatorada para o Supabase
-    return _execute_query(query, (user_id,), fetch='all')
+    # 1. Busca TODOS os ativos e TODAS as transações do usuário de uma vez
+    todos_ativos = get_all_ativos_usuario(user_id)
+    todas_transacoes = get_all_transacoes(user_id) # Esta função já busca por user_id
+
+    # 2. Organiza as transações por ativo para fácil acesso
+    transacoes_por_ativo = {}
+    # Colunas em todas_transacoes: ["ID", "Código", "Tipo", "Data", "Quantidade", "Preço Unitário"]
+    for transacao in todas_transacoes:
+        codigo_ativo = transacao[1]
+        if codigo_ativo not in transacoes_por_ativo:
+            transacoes_por_ativo[codigo_ativo] = []
+        # Adiciona uma tupla simplificada para o cálculo
+        transacoes_por_ativo[codigo_ativo].append(
+            (transacao[2], transacao[3], transacao[4], transacao[5]) # tipo, data, qtd, preco
+        )
+
+    # 3. Itera sobre cada ativo cadastrado e calcula a posição FIFO
+    portfolio_final = []
+    for ativo in todos_ativos:
+        # Colunas em todos_ativos: ["ID", "Código", "Descrição", "Tipo", "Indexador", "Taxa %", "Vencimento"]
+        investimento_id, codigo, descricao, tipo, indexador, taxa, vencimento = ativo
+        
+        transacoes_do_ativo = transacoes_por_ativo.get(codigo, [])
+        
+        if not transacoes_do_ativo:
+            continue # Pula ativos sem transações
+
+        # 4. Chama a função de cálculo FIFO
+        quantidade_final, preco_medio_fifo = _calculate_fifo_position(transacoes_do_ativo)
+
+        # 5. Adiciona ao resultado apenas se a posição não for zerada
+        if quantidade_final > 0.00000001:
+            portfolio_final.append((
+                investimento_id, codigo, descricao, tipo,
+                quantidade_final, preco_medio_fifo,
+                indexador, taxa, vencimento
+            ))
+
+    return portfolio_final
+
 
 @st.cache_data
 def get_investimentos_usuario(user_id):
@@ -573,7 +639,7 @@ def get_investimentos_usuario(user_id):
 
 @st.cache_data
 def get_all_transacoes(user_id):
-    query = "SELECT t.transacao_id, i.codigo, t.tipo_transacao, t.data, t.quantidade, t.preco_unitario FROM transacoes_investimento t JOIN investimentos i ON t.investimento_id = i.investimento_id WHERE i.user_id = %s ORDER BY t.data DESC"
+    query = "SELECT t.transacao_id, i.codigo, t.tipo_transacao, t.data, t.quantidade, t.preco_unitario FROM transacoes_investimento t JOIN investimentos i ON t.investimento_id = i.investimento_id WHERE i.user_id = %s ORDER BY t.data ASC, t.transacao_id ASC"
     return _execute_query(query, (user_id,), fetch='all')
 
 def update_transacao_investimento(transacao_id, data, quantidade, preco_unitario):
