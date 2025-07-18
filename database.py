@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 import utils
 import time
 from collections import deque # Importa a estrutura de dados 'deque'
-import copy # Importa a biblioteca para cópias
+import copy 
 
 # --- FUNÇÃO CENTRAL DE CONEXÃO ---
 def _get_db_connection():
@@ -379,7 +379,6 @@ def insert_despesa(user_id, conta_id, data_compra_str, valor, categoria, tipo_pa
                 primeiro_vencimento = _calcular_vencimento_credito(data_compra_base, dia_vencimento, dias_fechamento)
                 vencimento_iteracao = primeiro_vencimento + relativedelta(months=i)
         
-        # <<< A CORREÇÃO ESTÁ AQUI >>>
         elif tipo_pagamento == 'Débito' and not is_recorrencia_mode:
             # Para Débito parcelado, o vencimento também avança mensalmente, a partir da data da compra.
             vencimento_iteracao = data_compra_base + relativedelta(months=i)
@@ -544,34 +543,29 @@ def add_transacao_investimento(investimento_id, tipo_transacao, data, quantidade
     _execute_query(query, params, commit=True)
     st.cache_data.clear()
 
-# --- FUNÇÃO FIFO CORRIGIDA ---
+# --- FUNÇÃO FIFO CORRIGIDA E ROBUSTA ---
 def _calculate_fifo_position(transactions):
     """
-    Calcula a posição final e o preço médio de compra usando o método FIFO,
-    com tolerância para erros de ponto flutuante.
-    'transactions' é uma lista de tuplas (tipo_transacao, data, quantidade, preco_unitario).
+    Calcula a posição final e o preço médio de compra usando o método FIFO.
     """
-    compras = deque()
-    # Epsilon para lidar com a imprecisão de ponto flutuante
+    compras = deque() 
     epsilon = 1e-9
 
     for tipo, data, qtd, preco in transactions:
+        qtd_float = float(qtd)
         if tipo == 'compra':
-            # Garante que os dados são do tipo float para os cálculos
-            compras.append({'quantidade': float(qtd), 'preco_unitario': float(preco)})
+            compras.append({'quantidade': qtd_float, 'preco_unitario': float(preco)})
         elif tipo == 'venda':
-            qtd_a_vender = float(qtd)
-            # O loop continua enquanto a quantidade a vender for significativamente maior que zero
+            qtd_a_vender = qtd_float
             while qtd_a_vender > epsilon and compras:
                 lote_mais_antigo = compras[0]
                 
-                # Comparamos com uma tolerância (epsilon)
-                if lote_mais_antigo['quantidade'] <= qtd_a_vender + epsilon:
-                    # A venda consome o lote inteiro
-                    qtd_a_vender -= lote_mais_antigo['quantidade']
+                qtd_no_lote = lote_mais_antigo['quantidade']
+                
+                if qtd_no_lote <= qtd_a_vender + epsilon:
+                    qtd_a_vender -= qtd_no_lote
                     compras.popleft()
                 else:
-                    # A venda consome parte do lote
                     lote_mais_antigo['quantidade'] -= qtd_a_vender
                     qtd_a_vender = 0
     
@@ -580,16 +574,11 @@ def _calculate_fifo_position(transactions):
 
     quantidade_total_final = sum(lote['quantidade'] for lote in compras)
     
-    # Se a quantidade restante for insignificante, consideramos zerada
     if quantidade_total_final < epsilon:
         return 0, 0
 
     custo_total_final = sum(lote['quantidade'] * lote['preco_unitario'] for lote in compras)
     
-    # Evita divisão por zero se, por algum motivo, a quantidade final for zero
-    if quantidade_total_final == 0:
-         return 0, 0
-
     preco_medio_fifo = custo_total_final / quantidade_total_final
     return quantidade_total_final, preco_medio_fifo
 
@@ -599,13 +588,10 @@ def _calculate_fifo_position(transactions):
 def get_portfolio_consolidado(user_id):
     """
     Calcula a posição atual de cada ativo do usuário usando o método FIFO.
-    Esta função agora é procedural e não depende de uma única query complexa.
     """
-    # 1. Busca TODOS os ativos e TODAS as transações do usuário de uma vez
     todos_ativos = get_all_ativos_usuario(user_id)
     todas_transacoes = get_all_transacoes(user_id) 
 
-    # 2. Organiza as transações por ativo para fácil acesso
     transacoes_por_ativo = {}
     for transacao in todas_transacoes:
         codigo_ativo = transacao[1]
@@ -615,7 +601,6 @@ def get_portfolio_consolidado(user_id):
             (transacao[2], transacao[3], transacao[4], transacao[5]) # tipo, data, qtd, preco
         )
 
-    # 3. Itera sobre cada ativo cadastrado e calcula a posição FIFO
     portfolio_final = []
     for ativo in todos_ativos:
         investimento_id, codigo, descricao, tipo, indexador, taxa, vencimento = ativo
@@ -624,12 +609,11 @@ def get_portfolio_consolidado(user_id):
         
         if not transacoes_do_ativo:
             continue
+            
+        # A chamada à função de cálculo permanece a mesma, pois a lógica foi corrigida internamente
+        quantidade_final, preco_medio_fifo = _calculate_fifo_position(transacoes_do_ativo)
 
-        # --- CORREÇÃO CRÍTICA: Passa uma cópia da lista de transações ---
-        # Isto evita que a função de cálculo modifique a lista original,
-        # o que poderia afetar os cálculos de outros ativos se a estrutura de dados fosse reutilizada.
-        quantidade_final, preco_medio_fifo = _calculate_fifo_position(copy.deepcopy(transacoes_do_ativo))
-
+        # Usamos uma tolerância pequena (epsilon) para a verificação
         if quantidade_final > 1e-9:
             portfolio_final.append((
                 investimento_id, codigo, descricao, tipo,
@@ -696,7 +680,6 @@ def update_ativo(investimento_id, user_id, descricao, indexador, taxa_percentual
         WHERE investimento_id = %s AND user_id = %s
     """
     params = (descricao, indexador, taxa_percentual, data_vencimento_str, investimento_id, user_id)
-    # A CORREÇÃO CRÍTICA ESTÁ AQUI: adicionar commit=True
     _execute_query(query, params, commit=True)
     st.cache_data.clear()
 
@@ -704,8 +687,6 @@ def delete_ativo(investimento_id, user_id):
     """Exclui um ativo. A constraint ON DELETE CASCADE no banco de dados
        garante que as transações associadas também sejam removidas.
     """
-    # A exceção será levantada pelo SGBD se a foreign key não tiver CASCADE
-    # e houver transações, o que será capturado na interface.
     query = "DELETE FROM investimentos WHERE investimento_id = %s AND user_id = %s"
     _execute_query(query, (investimento_id, user_id), commit=True)
     st.cache_data.clear()
@@ -722,7 +703,6 @@ def get_orcamentos(user_id):
 def set_orcamento(user_id, categoria_nome, limite):
     """
     Insere ou atualiza o limite de orçamento para uma categoria específica.
-    Usa a funcionalidade 'ON CONFLICT' do PostgreSQL para fazer um 'UPSERT'.
     """
     query = """
         INSERT INTO orcamentos (user_id, categoria_nome, limite_mensal)
@@ -809,7 +789,6 @@ def get_transacoes_consolidadas(user_id, conta_id=None):
     """
     transacoes = []
     
-    # Constrói a cláusula WHERE dinamicamente
     filtro_sql = " AND conta_id = %s" if conta_id else ""
     params_base = [user_id]
     if conta_id:
@@ -817,19 +796,16 @@ def get_transacoes_consolidadas(user_id, conta_id=None):
     
     conn = _get_db_connection()
     with conn.cursor() as cur:
-        # Busca Saldos Iniciais (se for uma conta específica, pega só o dela)
         query_contas = "SELECT data_inicial, nome, saldo_inicial FROM contas WHERE user_id = %s" + filtro_sql
         cur.execute(query_contas, tuple(params_base))
         for data, nome, saldo in cur.fetchall():
             if data and saldo != 0:
                 transacoes.append((data, f"Saldo Inicial - {nome}", saldo))
         
-        # Busca Receitas
         query_receitas = "SELECT data, descricao, valor FROM receitas WHERE user_id = %s" + filtro_sql
         cur.execute(query_receitas, tuple(params_base))
         transacoes.extend(cur.fetchall())
             
-        # Busca Despesas
         query_despesas = "SELECT data_vencimento, descricao, valor FROM despesas WHERE user_id = %s" + filtro_sql
         cur.execute(query_despesas, tuple(params_base))
         for data, descricao, valor in cur.fetchall():
@@ -843,8 +819,6 @@ def get_transacoes_consolidadas(user_id, conta_id=None):
 def add_operacao_estruturada(user_id, ativo_subjacente, nome_estrategia, data_montagem, pernas):
     """
     Adiciona uma nova operação estruturada e suas pernas em uma única transação.
-    'pernas' deve ser uma lista de dicionários.
-    --- VERSÃO ATUALIZADA PARA INCLUIR STRIKE ---
     """
     conn = _get_db_connection()
     try:
@@ -875,20 +849,17 @@ def add_operacao_estruturada(user_id, ativo_subjacente, nome_estrategia, data_mo
     finally:
         conn.close()
     st.cache_data.clear()
-    
-    st.cache_data.clear()
 
 @st.cache_data
 def get_operacoes_estruturadas(user_id, status="Aberta"):
     """
     Busca todas as operações estruturadas de um usuário com um determinado status.
-    --- VERSÃO ATUALIZADA PARA INCLUIR strike E perna_id ---
     """
     query = """
         SELECT
             op.operacao_id, op.ativo_subjacente, op.nome_estrategia,
             op.data_montagem, op.status, p.perna_id, p.codigo_opcao,
-            p.tipo_opcao, p.tipo_operacao, p.strike, p.quantidade, -- <<< STRIKE ADICIONADO AQUI
+            p.tipo_opcao, p.tipo_operacao, p.strike, p.quantidade,
             p.preco_entrada, p.data_vencimento
         FROM operacoes_estruturadas op
         JOIN operacoes_pernas p ON op.operacao_id = p.operacao_id
@@ -900,35 +871,30 @@ def get_operacoes_estruturadas(user_id, status="Aberta"):
 def desmontar_operacao(operacao_id, data_desmontagem, pernas_saida):
     """
     Atualiza os preços de saída das pernas, fecha a operação e calcula o resultado.
-    'pernas_saida' é um dicionário {codigo_opcao: preco_saida}
     """
     conn = _get_db_connection()
     try:
         with conn.cursor() as cur:
             resultado_final = 0
             
-            # Pega todas as pernas da operação para calcular o resultado
             cur.execute("SELECT codigo_opcao, tipo_operacao, quantidade, preco_entrada FROM operacoes_pernas WHERE operacao_id = %s", (operacao_id,))
             todas_pernas = cur.fetchall()
             
             for codigo, tipo_op, qtd, preco_ent in todas_pernas:
                 preco_saida = pernas_saida.get(codigo, 0.0)
                 
-                # Atualiza o preço de saída no banco
                 cur.execute(
                     "UPDATE operacoes_pernas SET preco_saida = %s WHERE operacao_id = %s AND codigo_opcao = %s",
                     (preco_saida, operacao_id, codigo)
                 )
                 
-                # Calcula o resultado da perna
-                if tipo_op == 'compra': # Comprou na entrada, vendeu na saída
+                if tipo_op == 'compra': 
                     resultado_perna = (preco_saida - preco_ent) * qtd
-                else: # Vendeu na entrada, comprou na saída
+                else:
                     resultado_perna = (preco_ent - preco_saida) * qtd
                 
                 resultado_final += resultado_perna
 
-            # Atualiza a operação principal com o resultado e a data de desmontagem
             cur.execute(
                 "UPDATE operacoes_estruturadas SET status = 'Fechada', data_desmontagem = %s, resultado = %s WHERE operacao_id = %s",
                 (data_desmontagem, resultado_final, operacao_id)
@@ -956,7 +922,6 @@ def update_operacao_header(operacao_id, ativo_subjacente, nome_estrategia, data_
 def update_operacao_perna(perna_id, codigo_opcao, tipo_operacao, strike, quantidade, preco_entrada, data_vencimento):
     """
     Atualiza os detalhes de uma única perna da operação.
-    --- VERSÃO ATUALIZADA PARA INCLUIR STRIKE ---
     """
     tipo_opcao = "CALL" if 'C' in codigo_opcao.upper() else "PUT"
     query = "UPDATE operacoes_pernas SET codigo_opcao = %s, tipo_opcao = %s, tipo_operacao = %s, strike = %s, quantidade = %s, preco_entrada = %s, data_vencimento = %s WHERE perna_id = %s"
@@ -972,7 +937,6 @@ def delete_operacao_perna(perna_id):
 def delete_operacao_inteira(operacao_id):
     """
     Exclui uma operação estruturada inteira. 
-    A configuração 'ON DELETE CASCADE' no banco de dados cuidará de excluir as pernas associadas.
     """
     _execute_query("DELETE FROM operacoes_estruturadas WHERE operacao_id = %s", (operacao_id,), commit=True)
     st.cache_data.clear()
@@ -981,7 +945,6 @@ def delete_operacao_inteira(operacao_id):
 def get_operacoes_finalizadas(user_id):
     """
     Busca todas as operações com status 'Fechada' ou 'Expirada'.
-    --- VERSÃO ATUALIZADA PARA INCLUIR TODOS OS DETALHES DAS PERNAS ---
     """
     query = """
         SELECT
@@ -992,9 +955,9 @@ def get_operacoes_finalizadas(user_id):
             op.data_desmontagem,
             op.status,
             op.resultado,
-            p.codigo_opcao,    -- Adicionado
-            p.tipo_opcao,      -- Adicionado
-            p.tipo_operacao,   -- Adicionado
+            p.codigo_opcao,
+            p.tipo_opcao,
+            p.tipo_operacao,
             p.strike,
             p.quantidade
         FROM operacoes_estruturadas op
@@ -1011,13 +974,11 @@ def reabrir_operacao(operacao_id):
     conn = _get_db_connection()
     try:
         with conn.cursor() as cur:
-            # 1. Limpa os dados de saída das pernas
             cur.execute(
                 "UPDATE operacoes_pernas SET preco_saida = NULL WHERE operacao_id = %s",
                 (operacao_id,)
             )
 
-            # 2. Reverte o status da operação principal
             cur.execute(
                 "UPDATE operacoes_estruturadas SET status = 'Aberta', data_desmontagem = NULL, resultado = NULL WHERE operacao_id = %s",
                 (operacao_id,)
@@ -1054,7 +1015,6 @@ def get_financial_summary_for_ai(user_id, start_date, end_date):
     summary = {}
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # Gastos totais por categoria no período selecionado
             cur.execute("""
                 SELECT categoria, SUM(valor) as total
                 FROM despesas
@@ -1064,7 +1024,6 @@ def get_financial_summary_for_ai(user_id, start_date, end_date):
             """, (user_id, start_date, end_date))
             summary['gastos_recentes'] = cur.fetchall()
 
-            # Receitas totais no período selecionado
             cur.execute("""
                 SELECT SUM(valor) as total
                 FROM receitas
@@ -1072,7 +1031,6 @@ def get_financial_summary_for_ai(user_id, start_date, end_date):
             """, (user_id, start_date, end_date))
             summary['receitas_recentes'] = cur.fetchone()['total'] or 0
 
-            # Orçamentos definidos pelo usuário (continua o mesmo)
             cur.execute("""
                 SELECT categoria_nome, limite_mensal
                 FROM orcamentos
@@ -1094,11 +1052,9 @@ def get_full_database_schema():
     schema_info = ""
     try:
         with conn.cursor() as cur:
-            # Lista de tabelas que a IA pode consultar
             tabelas = ['despesas', 'receitas', 'contas', 'categorias', 'orcamentos']
             for tabela in tabelas:
                 schema_info += f"Tabela '{tabela}':\n"
-                # Usamos a view information_schema para obter os detalhes das colunas
                 cur.execute(f"""
                     SELECT column_name, data_type 
                     FROM information_schema.columns 
@@ -1117,16 +1073,13 @@ def get_full_database_schema():
 def execute_generated_sql(query, params=None):
     """
     Executa uma query SQL gerada pela IA de forma segura.
-    Retorna os resultados como uma lista de dicionários.
     """
-    # Medida de segurança CRÍTICA: só permite queries de leitura.
     if not query.strip().upper().startswith("SELECT"):
         raise ValueError("Ação não permitida. Apenas consultas SELECT são autorizadas.")
         
     conn = _get_db_connection()
     results = []
     try:
-        # Usamos RealDictCursor para obter resultados como dicionários, mais fácil para a IA ler.
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(query, params)
             results = cur.fetchall()
