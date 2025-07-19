@@ -381,20 +381,28 @@ def get_portfolio_consolidado(user_id):
     return _execute_query(query, (user_id,), fetch='all')
 
 
-def get_portfolio_fifo(user_id):
+@st.cache_data
+def get_portfolio_consolidado_fifo(user_id):
     """
-    Calcula a posição atual de cada ativo do usuário com base no método FIFO fiscal.
+    Calcula a posição atual de cada ativo do usuário usando o método FIFO Fiscal.
+    Retorna os mesmos campos da versão original para compatibilidade com o front-end.
     """
+    # 1. Busca todos os ativos do usuário
     ativos = _execute_query("""
-        SELECT i.investimento_id, i.codigo, i.descricao, ti.nome as tipo
+        SELECT i.investimento_id, i.codigo, i.descricao, ti.nome as tipo,
+               i.indexador, i.taxa_percentual, i.data_vencimento
         FROM investimentos i
         JOIN tipos_investimento ti ON i.tipo_id = ti.tipo_id
         WHERE i.user_id = %s
+        ORDER BY i.codigo
     """, (user_id,), fetch='all')
 
     resultado_final = []
 
-    for investimento_id, codigo, descricao, tipo in ativos:
+    for investimento in ativos:
+        investimento_id, codigo, descricao, tipo, indexador, taxa_percentual, data_vencimento = investimento
+
+        # 2. Busca as transações do ativo
         transacoes = _execute_query("""
             SELECT tipo_transacao, data, quantidade, preco_unitario
             FROM transacoes_investimento
@@ -405,6 +413,7 @@ def get_portfolio_fifo(user_id):
         if not transacoes:
             continue
 
+        # 3. Aplica FIFO para calcular a posição atual
         compras = deque()
         for tipo_transacao, data, qtd, preco in transacoes:
             if tipo_transacao == 'compra':
@@ -419,24 +428,29 @@ def get_portfolio_fifo(user_id):
                         compras.popleft()
                     qtd_venda -= usado
 
-        # Posição atual com base nas compras restantes
-        qtd_total = sum(c["quantidade"] for c in compras)
-        if qtd_total == 0:
-            continue
+        # 4. Calcula posição atual
+        quantidade_total = sum(c["quantidade"] for c in compras)
+        if quantidade_total < 1e-9:
+            continue  # ignora posições zeradas
 
         custo_total = sum(c["quantidade"] * c["preco_unitario"] for c in compras)
-        preco_medio_fiscal = custo_total / qtd_total if qtd_total > 0 else 0
+        preco_medio_compra = custo_total / quantidade_total if quantidade_total > 0 else 0
 
-        resultado_final.append({
-            "investimento_id": investimento_id,
-            "codigo": codigo,
-            "descricao": descricao,
-            "tipo": tipo,
-            "quantidade_total": qtd_total,
-            "preco_medio_fiscal": preco_medio_fiscal
-        })
+        # 5. Adiciona ao resultado com os mesmos campos da versão anterior
+        resultado_final.append((
+            investimento_id,
+            codigo,
+            descricao,
+            tipo,
+            quantidade_total,
+            preco_medio_compra,
+            indexador,
+            taxa_percentual,
+            data_vencimento
+        ))
 
     return resultado_final
+
 
 
 
