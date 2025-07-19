@@ -20,7 +20,7 @@ tab_portfolio, tab_transacoes, tab_ativos, tab_operacoes = st.tabs(["Meu Portfó
 with tab_portfolio:
     st.markdown("### Visão Geral da Carteira")
     # A função no DB foi atualizada para retornar os novos campos de Renda Fixa
-    portfolio = database.get_portfolio_consolidado_fifo(user_id)
+    portfolio = database.get_portfolio_consolidado(user_id)
 
 
     if not portfolio:
