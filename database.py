@@ -381,6 +381,65 @@ def get_portfolio_consolidado(user_id):
     return _execute_query(query, (user_id,), fetch='all')
 
 
+def get_portfolio_fifo(user_id):
+    """
+    Calcula a posição atual de cada ativo do usuário com base no método FIFO fiscal.
+    """
+    ativos = _execute_query("""
+        SELECT i.investimento_id, i.codigo, i.descricao, ti.nome as tipo
+        FROM investimentos i
+        JOIN tipos_investimento ti ON i.tipo_id = ti.tipo_id
+        WHERE i.user_id = %s
+    """, (user_id,), fetch='all')
+
+    resultado_final = []
+
+    for investimento_id, codigo, descricao, tipo in ativos:
+        transacoes = _execute_query("""
+            SELECT tipo_transacao, data, quantidade, preco_unitario
+            FROM transacoes_investimento
+            WHERE investimento_id = %s
+            ORDER BY data, transacao_id
+        """, (investimento_id,), fetch='all')
+
+        if not transacoes:
+            continue
+
+        compras = deque()
+        for tipo_transacao, data, qtd, preco in transacoes:
+            if tipo_transacao == 'compra':
+                compras.append({"quantidade": qtd, "preco_unitario": preco})
+            elif tipo_transacao == 'venda':
+                qtd_venda = qtd
+                while qtd_venda > 0 and compras:
+                    compra = compras[0]
+                    usado = min(qtd_venda, compra["quantidade"])
+                    compra["quantidade"] -= usado
+                    if compra["quantidade"] == 0:
+                        compras.popleft()
+                    qtd_venda -= usado
+
+        # Posição atual com base nas compras restantes
+        qtd_total = sum(c["quantidade"] for c in compras)
+        if qtd_total == 0:
+            continue
+
+        custo_total = sum(c["quantidade"] * c["preco_unitario"] for c in compras)
+        preco_medio_fiscal = custo_total / qtd_total if qtd_total > 0 else 0
+
+        resultado_final.append({
+            "investimento_id": investimento_id,
+            "codigo": codigo,
+            "descricao": descricao,
+            "tipo": tipo,
+            "quantidade_total": qtd_total,
+            "preco_medio_fiscal": preco_medio_fiscal
+        })
+
+    return resultado_final
+
+
+
 @st.cache_data
 def get_investimentos_usuario(user_id):
     return _execute_query("SELECT investimento_id, codigo FROM investimentos WHERE user_id = %s ORDER BY codigo", (user_id,), fetch='all')
