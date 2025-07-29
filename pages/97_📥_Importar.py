@@ -70,7 +70,9 @@ def gerar_template_csv_operacoes_estruturadas():
         'strike': ['40.00', '42.00'],
         'quantidade': [100, 100],
         'preco_entrada': ['1.50', '0.50'],
-        'data_vencimento': ['20/08/2025', '20/08/2025']
+        'data_vencimento': ['20/08/2025', '20/08/2025'],
+        'data_desmontagem': ['20/08/2025', '20/08/2025'],  # Nova coluna
+        'preco_saida': ['1.80', '0.80']  # Nova coluna
     }
     df_template = pd.DataFrame(template_data)
     return df_template.to_csv(index=False, sep=';').encode('utf-8')
