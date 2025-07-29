@@ -757,32 +757,45 @@ def get_transacoes_consolidadas(user_id, conta_id=None):
 
 # -------- Operações Estruturadas com Opções --------
 
-def add_operacao_estruturada(user_id, ativo_subjacente, nome_estrategia, data_montagem, pernas):
+def add_operacao_estruturada(user_id, ativo_subjacente, nome_estrategia, data_montagem, pernas, data_desmontagem=None):
     """
     Adiciona uma nova operação estruturada e suas pernas em uma única transação.
-    'pernas' deve ser uma lista de dicionários.
-    --- VERSÃO ATUALIZADA PARA INCLUIR STRIKE ---
+    Se data_desmontagem for fornecida, a operação já entra como 'Fechada'.
     """
     conn = _get_db_connection()
     try:
         with conn.cursor() as cur:
+            status = 'Fechada' if data_desmontagem else 'Aberta'
+            resultado_final = None
+
+            if status == 'Fechada':
+                resultado_final = 0
+                for p in pernas:
+                    preco_saida = p.get('preco_saida', 0.0)
+                    if p['tipo_operacao'] == 'compra':
+                        resultado_perna = (preco_saida - p['preco_entrada']) * p['quantidade']
+                    else:
+                        resultado_perna = (p['preco_entrada'] - preco_saida) * p['quantidade']
+                    resultado_final += resultado_perna
+
             cur.execute(
-                "INSERT INTO operacoes_estruturadas (user_id, ativo_subjacente, nome_estrategia, data_montagem, status) VALUES (%s, %s, %s, %s, 'Aberta') RETURNING operacao_id",
-                (user_id, ativo_subjacente, nome_estrategia, data_montagem)
+                "INSERT INTO operacoes_estruturadas (user_id, ativo_subjacente, nome_estrategia, data_montagem, status, data_desmontagem, resultado) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING operacao_id",
+                (user_id, ativo_subjacente, nome_estrategia, data_montagem, status, data_desmontagem, resultado_final)
             )
             operacao_id = cur.fetchone()[0]
 
             dados_pernas = [
                 (
                     operacao_id, p['codigo_opcao'], p['tipo_opcao'], p['tipo_operacao'],
-                    p['strike'], p['quantidade'], p['preco_entrada'], p['data_vencimento']
+                    p['strike'], p['quantidade'], p['preco_entrada'], p['data_vencimento'],
+                    p.get('preco_saida') if status == 'Fechada' else None
                 )
                 for p in pernas
             ]
-
+            
             psycopg2.extras.execute_values(
                 cur,
-                "INSERT INTO operacoes_pernas (operacao_id, codigo_opcao, tipo_opcao, tipo_operacao, strike, quantidade, preco_entrada, data_vencimento) VALUES %s",
+                "INSERT INTO operacoes_pernas (operacao_id, codigo_opcao, tipo_opcao, tipo_operacao, strike, quantidade, preco_entrada, data_vencimento, preco_saida) VALUES %s",
                 dados_pernas
             )
             
@@ -791,8 +804,6 @@ def add_operacao_estruturada(user_id, ativo_subjacente, nome_estrategia, data_mo
         conn.rollback(); raise e
     finally:
         conn.close()
-    st.cache_data.clear()
-    
     st.cache_data.clear()
 
 @st.cache_data
