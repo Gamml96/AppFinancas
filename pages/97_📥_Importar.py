@@ -276,14 +276,16 @@ def processar_importacao_operacoes_estruturadas(df, user_id):
         st.error(f"O arquivo enviado não contém todas as colunas necessárias. Verifique o template.")
         return
 
-    # Agrupa o DataFrame pelo ID da estratégia
     for id_estrategia, group in df.groupby('id_estrategia'):
         try:
-            # Pega os dados da operação (que são os mesmos para todas as linhas do grupo)
             primeira_perna = group.iloc[0]
             ativo_subjacente = str(primeira_perna['ativo_subjacente'])
             nome_estrategia = str(primeira_perna['nome_estrategia'])
             data_montagem = pd.to_datetime(primeira_perna['data_montagem'], dayfirst=True).date()
+
+            data_desmontagem = None
+            if 'data_desmontagem' in group.columns and pd.notna(primeira_perna['data_desmontagem']):
+                data_desmontagem = pd.to_datetime(primeira_perna['data_desmontagem'], dayfirst=True).date()
 
             pernas = []
             for index, row in group.iterrows():
@@ -296,14 +298,17 @@ def processar_importacao_operacoes_estruturadas(df, user_id):
                     "preco_entrada": float(str(row['preco_entrada']).replace(",", ".")),
                     "data_vencimento": pd.to_datetime(row['data_vencimento'], dayfirst=True).date()
                 }
-                # Validação básica
+
+                if data_desmontagem and 'preco_saida' in row and pd.notna(row['preco_saida']):
+                    perna['preco_saida'] = float(str(row['preco_saida']).replace(",", "."))
+
                 if perna['tipo_operacao'] not in ['compra', 'venda']:
                     raise ValueError(f"Tipo de operação inválido na linha {index+2}: {perna['tipo_operacao']}")
                 pernas.append(perna)
 
-            # Envia para o banco de dados
             database.add_operacao_estruturada(
-                user_id, ativo_subjacente.upper(), nome_estrategia, data_montagem.isoformat(), pernas
+                user_id, ativo_subjacente.upper(), nome_estrategia, data_montagem.isoformat(), pernas,
+                data_desmontagem.isoformat() if data_desmontagem else None
             )
             sucessos += 1
 
