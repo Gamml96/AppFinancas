@@ -684,7 +684,7 @@ def get_proximos_lancamentos(user_id, dias_futuros=7, conta_id=None):
 
 @st.cache_data
 def get_despesas_por_categoria(user_id, dt_start, dt_end):
-    query = "SELECT categoria, SUM(valor) FROM despesas WHERE user_id = %s AND data_vencimento BETWEEN %s AND %s AND categoria != 'Transfêrencia' GROUP BY categoria ORDER BY SUM(valor) DESC"
+    query = "SELECT categoria, SUM(valor) FROM despesas WHERE user_id = %s AND data_vencimento BETWEEN %s AND %s AND categoria != 'Transferência' GROUP BY categoria ORDER BY SUM(valor) DESC"
     return _execute_query(query, (user_id, dt_start, dt_end), fetch='all')
 
 @st.cache_data
