@@ -127,7 +127,7 @@ with tab_investimentos:
     st.markdown("### Resultados de Investimentos")
 
     # --- NOVA SEÇÃO: OPERAÇÕES NORMAIS (COMPRA E VENDA) ---
-    st.header("Resultados com Operações Normais (Compra e Venda)")
+    st.header("Resultados com Operações Compra e Venda")
 
     # Chama a nova função do banco de dados que você acabou de criar
     resultados_normais = database.get_resultados_operacoes_normais_por_ativo(user_id)
