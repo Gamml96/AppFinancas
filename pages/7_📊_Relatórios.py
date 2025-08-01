@@ -13,7 +13,7 @@ profile, user_id, username, credentials, authenticator = utils.check_authenticat
 tab_investimentos,tab_despesas, tab_orcamento = st.tabs([
     "Investimentos","Despesas", "Orçamento"
 ])
-st.title("Relatórios Financeiros")
+
 
 with tab_despesas:
     # --- FILTROS ---
