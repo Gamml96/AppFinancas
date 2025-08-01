@@ -124,28 +124,56 @@ with tab_orcamento:
                 st.markdown("---") # Separador para a próxima categoria
 
 with tab_investimentos:
-    st.markdown("### Investimentos")
-    # --- SEÇÃO OPERAÇÕES ESTRUTURADAS ---
+    st.markdown("### Resultados de Investimentos")
+
+    # --- NOVA SEÇÃO: OPERAÇÕES NORMAIS (COMPRA E VENDA) ---
+    st.header("Resultados com Operações Normais (Compra e Venda)")
+
+    # Chama a nova função do banco de dados que você acabou de criar
+    resultados_normais = database.get_resultados_operacoes_normais_por_ativo(user_id)
+
+    if not resultados_normais:
+        st.info("Você ainda não possui resultados de operações de compra e venda finalizadas (trades).")
+    else:
+        # Converte os resultados para um DataFrame do Pandas para fácil manipulação
+        df_resultados_normais = pd.DataFrame(resultados_normais, columns=['Ativo', 'Resultado Total (R$)', 'Nº de Vendas'])
+
+        # Calcula o resultado geral de todas as operações normais
+        resultado_geral_normais = df_resultados_normais['Resultado Total (R$)'].sum()
+        
+        # Exibe um resumo com st.metric
+        st.metric(label="Resultado Geral com Trades", value=f"{utils.formatar_moeda_brl(resultado_geral_normais)}")
+        
+        st.subheader("Detalhes por Ativo")
+        # Formata a coluna de resultado para exibir como moeda
+        df_resultados_normais['Resultado Total (R$)'] = df_resultados_normais['Resultado Total (R$)'].apply(utils.formatar_moeda_brl)
+        
+        # Exibe a tabela com os resultados por ativo
+        st.dataframe(df_resultados_normais, use_container_width=True, hide_index=True)
+
+    st.markdown("---") # Adiciona um separador visual
+
+    # --- SEÇÃO OPERAÇÕES ESTRUTURADAS (CÓDIGO EXISTENTE) ---
     st.header("Resultados com Operações Estruturadas")
 
-    # Chama a nova função do banco de dados
+    # Chama a função existente do banco de dados
     resultados_ops = database.get_resultados_operacoes_estruturadas_por_ativo(user_id)
 
     if not resultados_ops:
         st.info("Você ainda não possui resultados de operações estruturadas finalizadas.")
     else:
-        # Converte os resultados para um DataFrame do Pandas para fácil manipulação
+        # Converte os resultados para um DataFrame do Pandas
         df_resultados = pd.DataFrame(resultados_ops, columns=['Ativo Subjacente', 'Resultado Total (R$)', 'Nº de Operações'])
 
         # Calcula o resultado geral
         resultado_geral = df_resultados['Resultado Total (R$)'].sum()
         
         # Exibe um resumo com st.metric
-        st.metric(label="Resultado Geral com Operações Estruturadas", value=f" {utils.formatar_moeda_brl(resultado_geral)}")
+        st.metric(label="Resultado Geral com Operações Estruturadas", value=f"{utils.formatar_moeda_brl(resultado_geral)}")
         
         st.subheader("Detalhes por Ativo")
         # Formata a coluna de resultado para exibir como moeda
-        df_resultados['Resultado Total (R$)'] = df_resultados['Resultado Total (R$)'].apply(lambda x: f"{utils.formatar_moeda_brl(x)}")
+        df_resultados['Resultado Total (R$)'] = df_resultados['Resultado Total (R$)'].apply(utils.formatar_moeda_brl)
         
         # Exibe a tabela com os resultados por ativo
-        st.dataframe(df_resultados, use_container_width=True,hide_index=True)
+        st.dataframe(df_resultados, use_container_width=True, hide_index=True)

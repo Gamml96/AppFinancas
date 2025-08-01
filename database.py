@@ -1096,3 +1096,77 @@ def get_resultados_operacoes_estruturadas_por_ativo(user_id):
             return resultados
     finally:
         conn.close()
+
+def get_resultados_operacoes_normais_por_ativo(user_id):
+    """
+    Calcula o resultado de todas as operações de compra e venda (trade) finalizadas,
+    agrupado por ativo. Utiliza o método do preço médio para apuração.
+    """
+    # 1. Buscar todas as transações do usuário, ordenadas por data para cálculo correto do preço médio
+    query_transacoes = """
+        SELECT
+            i.codigo,
+            t.tipo_transacao,
+            t.data,
+            t.quantidade,
+            t.preco_unitario
+        FROM transacoes_investimento t
+        JOIN investimentos i ON t.investimento_id = i.investimento_id
+        WHERE i.user_id = %s
+        ORDER BY i.codigo, t.data;
+    """
+    transacoes = _execute_query(query_transacoes, (user_id,), fetch='all')
+
+    if not transacoes:
+        return []
+
+    # 2. Processar os resultados em Python para lidar com a lógica do preço médio
+    resultados = {}         # Dicionário para armazenar o resultado final por ativo
+    posicao_atual = {}      # Dicionário para rastrear a quantidade e o custo total de cada ativo em carteira
+
+    for codigo, tipo, data, qtd, preco in transacoes:
+        # Inicializa os dicionários se for o primeiro registro do ativo
+        if codigo not in posicao_atual:
+            posicao_atual[codigo] = {'qtd_total': 0, 'custo_total': 0}
+        if codigo not in resultados:
+            resultados[codigo] = {'resultado_total': 0, 'vendas_realizadas': 0}
+
+        if tipo == 'compra':
+            # Se for compra, adiciona à posição atual
+            posicao_atual[codigo]['custo_total'] += qtd * preco
+            posicao_atual[codigo]['qtd_total'] += qtd
+        
+        elif tipo == 'venda':
+            # Se for venda, e houver posição no ativo, calcula o lucro/prejuízo
+            if posicao_atual[codigo]['qtd_total'] > 0:
+                # Calcula o preço médio do ativo no momento da venda
+                preco_medio = posicao_atual[codigo]['custo_total'] / posicao_atual[codigo]['qtd_total']
+                
+                # Calcula o custo da quantidade que está sendo vendida
+                custo_da_venda = qtd * preco_medio
+                # Calcula o lucro ou prejuízo da operação
+                lucro_prejuizo = (qtd * preco) - custo_da_venda
+
+                # Acumula o resultado para o ativo
+                resultados[codigo]['resultado_total'] += lucro_prejuizo
+                resultados[codigo]['vendas_realizadas'] += 1
+
+                # Abate o valor e a quantidade da posição atual
+                posicao_atual[codigo]['custo_total'] -= custo_da_venda
+                posicao_atual[codigo]['qtd_total'] -= qtd
+
+    # 3. Formatar a lista de saída
+    output = []
+    for codigo, data in resultados.items():
+        # Apenas inclui no relatório os ativos que tiveram operações de venda
+        if data['vendas_realizadas'] > 0:
+            output.append((
+                codigo,
+                data['resultado_total'],
+                data['vendas_realizadas']
+            ))
+
+    # Ordena a lista do maior para o menor resultado
+    output.sort(key=lambda x: x[1], reverse=True)
+    
+    return output
