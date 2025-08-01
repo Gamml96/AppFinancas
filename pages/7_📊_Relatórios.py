@@ -141,11 +141,11 @@ with tab_investimentos:
         resultado_geral = df_resultados['Resultado Total (R$)'].sum()
         
         # Exibe um resumo com st.metric
-        st.metric(label="Resultado Geral com Operações Estruturadas", value=f"R$ {resultado_geral:,.2f}")
+        st.metric(label="Resultado Geral com Operações Estruturadas", value=f" {utils.formatar_moeda_brl(resultado_geral)}")
         
         st.subheader("Detalhes por Ativo")
         # Formata a coluna de resultado para exibir como moeda
         df_resultados['Resultado Total (R$)'] = df_resultados['Resultado Total (R$)'].apply(lambda x: f"{utils.formatar_moeda_brl(x)}")
         
         # Exibe a tabela com os resultados por ativo
-        st.dataframe(df_resultados, use_container_width=True)
+        st.dataframe(df_resultados, use_container_width=True,index = False)
