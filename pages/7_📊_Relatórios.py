@@ -148,4 +148,4 @@ with tab_investimentos:
         df_resultados['Resultado Total (R$)'] = df_resultados['Resultado Total (R$)'].apply(lambda x: f"{utils.formatar_moeda_brl(x)}")
         
         # Exibe a tabela com os resultados por ativo
-        st.dataframe(df_resultados, use_container_width=True,index = False)
+        st.dataframe(df_resultados, use_container_width=True,hide_index=True)
