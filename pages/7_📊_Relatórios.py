@@ -145,7 +145,7 @@ with tab_investimentos:
         
         st.subheader("Detalhes por Ativo")
         # Formata a coluna de resultado para exibir como moeda
-        df_resultados['Resultado Total (R$)'] = df_resultados['Resultado Total (R$)'].apply(lambda x: f"R$ {x:,.2f}")
+        df_resultados['Resultado Total (R$)'] = df_resultados['Resultado Total (R$)'].apply(lambda x: f"{utils.formatar_moeda_brl(x)}")
         
         # Exibe a tabela com os resultados por ativo
         st.dataframe(df_resultados, use_container_width=True)
