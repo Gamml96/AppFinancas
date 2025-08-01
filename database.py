@@ -1061,3 +1061,38 @@ def execute_generated_sql(query, params=None):
     finally:
         conn.close()
     return results
+
+
+def get_resultados_operacoes_estruturadas_por_ativo(user_id):
+    """
+    Busca o resultado consolidado de todas as operações estruturadas fechadas,
+    agrupado por ativo subjacente.
+    """
+    conn = _get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # A consulta SQL faz o trabalho pesado:
+            # - Filtra por usuário e por operações 'Fechada'
+            # - Agrupa os resultados pelo 'ativo_subjacente'
+            # - Soma (SUM) os resultados de cada grupo
+            # - Conta (COUNT) quantas operações formam aquele grupo
+            cur.execute("""
+                SELECT 
+                    ativo_subjacente, 
+                    SUM(resultado) AS resultado_total,
+                    COUNT(operacao_id) AS quantidade_operacoes
+                FROM 
+                    operacoes_estruturadas
+                WHERE 
+                    user_id = %s AND status = 'Fechada'
+                GROUP BY 
+                    ativo_subjacente
+                ORDER BY 
+                    resultado_total DESC;
+            """, (user_id,))
+            
+            # Retorna uma lista de tuplas com (ativo, resultado_total, quantidade)
+            resultados = cur.fetchall()
+            return resultados
+    finally:
+        conn.close()
