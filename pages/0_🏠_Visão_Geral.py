@@ -146,11 +146,17 @@ else:
 
             df_display = fluxo_diario.sort_values(by="data", ascending=True)[
                 ["data", "entradas", "saidas", "saldo_acumulado"]]
-            styled_df = df_display.style.apply(highlight_today, axis=1).format(
-                {"entradas": utils.formatar_moeda_brl,
-                 "saidas": utils.formatar_moeda_brl,
-                 "saldo_acumulado": utils.formatar_moeda_brl}
-            ).hide(axis="index")
+            styled_df = (
+                df_display.style
+                .apply(highlight_today, axis=1)
+                .format({
+                    "entradas": utils.formatar_moeda_brl,
+                    "saidas": utils.formatar_moeda_brl,
+                    "saldo_acumulado": utils.formatar_moeda_brl
+                })
+                .background_gradient(subset=["saldo_acumulado"], cmap="RdYlGn")  # Aplica gradiente na coluna saldo
+                .hide(axis="index")
+            )
             st.dataframe(
                 styled_df,
                 column_config={
@@ -166,6 +172,7 @@ else:
             st.info("Não há dados suficientes para o gráfico/tabela no período/conta filtrado.")
     else:
         st.info("Não há dados para o período/conta filtrado selecionado.")
+
 
 
 
