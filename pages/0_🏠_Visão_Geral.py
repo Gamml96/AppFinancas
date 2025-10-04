@@ -45,6 +45,7 @@ with filtro_cols[0]:
     )
 with filtro_cols[1]:
     ano_selecionado = st.selectbox("Ano", options=anos, index=index_ano)
+st.markdown("---")
 
 # --- INÍCIO DA SEÇÃO: BOTÕES DE ACESSO RÁPIDO ---
 st.markdown("### Acesso Rápido")
@@ -147,7 +148,6 @@ with col3:
                             st.rerun()
                         except Exception as e:
                             st.error(f"Erro: {e}")
-st.markdown("---")
 
 # --- FILTRAGEM DO DATAFRAME ---
 df_filtrado = df.copy()
@@ -264,6 +264,7 @@ else:
             st.info("Não há dados suficientes para o gráfico/tabela no período/conta filtrado.")
     else:
         st.info("Não há dados para o período/conta filtrado selecionado.")
+
 
 
 
