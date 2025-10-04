@@ -67,7 +67,7 @@ fluxo_tudo = df.groupby('data').agg(
 fluxo_tudo['saldo_dia'] = fluxo_tudo['entradas'] - fluxo_tudo['saidas']
 fluxo_tudo['saldo_acumulado'] = fluxo_tudo['saldo_dia'].cumsum()
 saldo_atual_valor = fluxo_tudo[fluxo_tudo['data'].dt.date <= utils.get_local_today()]['saldo_acumulado'].iloc[-1] if not fluxo_tudo.empty else 0.0
-
+st.markdown("---")
 st.metric("Saldo Atual Consolidado (Hoje)", utils.formatar_moeda_brl(saldo_atual_valor))
 st.markdown("---")
 
@@ -159,3 +159,4 @@ else:
             st.info("Não há dados suficientes para o gráfico/tabela no período/conta filtrado.")
     else:
         st.info("Não há dados para o período/conta filtrado selecionado.")
+
