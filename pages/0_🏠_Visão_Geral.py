@@ -96,7 +96,7 @@ if df.empty:
     st.info("Você ainda não possui transações para exibir o fluxo de caixa.")
 else:
     st.markdown("### Fluxo de Caixa Diário")
-    st.markdown("---")
+    st.markdown("")
     if not df_filtrado.empty:
         df_temp = df_filtrado.copy().sort_values(by="data")
         df_temp['entradas'] = df_temp['valor'].apply(lambda x: x if x > 0 else 0)
@@ -161,6 +161,7 @@ else:
             st.info("Não há dados suficientes para o gráfico/tabela no período/conta filtrado.")
     else:
         st.info("Não há dados para o período/conta filtrado selecionado.")
+
 
 
 
