@@ -29,7 +29,8 @@ hoje = datetime.date.today()
 meses = {i: calendar.month_name[i] for i in range(1, 13)}
 meses_keys = list(meses.keys())
 meses_keys.insert(0, "Todos")
-mes_atual = date.today().month
+hoje = date.today()
+mes_atual = hoje.month
 index_mes = meses_keys.index(mes_atual) if mes_atual in meses_keys else 0
 
 filtro_cols = st.columns(3)
@@ -164,4 +165,5 @@ else:
             )
         else:
             st.info("Não há dados suficientes para o gráfico/tabela no período/conta filtrado.")
+
 
