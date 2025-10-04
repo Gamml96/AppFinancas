@@ -29,9 +29,11 @@ hoje = datetime.date.today()
 meses = {i: calendar.month_name[i] for i in range(1, 13)}
 meses_keys = list(meses.keys())
 meses_keys.insert(0, "Todos")
+mes_atual = date.today().month
+index_mes = meses_keys.index(mes_atual) if mes_atual in meses_keys else 0
 
 filtro_cols = st.columns(3)
-with filtro_cols[1]:
+with filtro_cols[2]:
     conta_filtro = st.selectbox("Conta", options=["Todas"] + list(contas_dict.keys()))
 # Carrega transações para montar anos e aplicar filtros
 transacoes = database.get_transacoes_consolidadas(
@@ -49,9 +51,12 @@ index_ano = anos.index(hoje.year) if hoje.year in anos else 0
 
 with filtro_cols[0]:
     mes_selecionado = st.selectbox(
-        "Mês", options=meses_keys, format_func=lambda x: "Todos" if x == "Todos" else meses[x]
+        "Mês",
+        options=meses_keys,
+        format_func=lambda x: "Todos" if x == "Todos" else meses[x],
+        index=index_mes
     )
-with filtro_cols[2]:
+with filtro_cols[1]:
     ano_selecionado = st.selectbox("Ano", options=anos, index=index_ano)
 
 # ==== filtragem para gráfico/tabela ====
@@ -159,3 +164,4 @@ else:
             )
         else:
             st.info("Não há dados suficientes para o gráfico/tabela no período/conta filtrado.")
+
