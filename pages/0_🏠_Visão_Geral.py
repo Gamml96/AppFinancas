@@ -147,7 +147,7 @@ else:
             df_display = fluxo_diario.sort_values(by="data", ascending=True)[
                 ["data", "entradas", "saidas", "saldo_acumulado"]]
             vmin = 500
-            vmax = 1000
+            vmax = df_display["saldo_acumulado"].max()
 
             styled_df = (
                 df_display.style
@@ -175,6 +175,7 @@ else:
             st.info("Não há dados suficientes para o gráfico/tabela no período/conta filtrado.")
     else:
         st.info("Não há dados para o período/conta filtrado selecionado.")
+
 
 
 
