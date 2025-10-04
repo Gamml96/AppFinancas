@@ -23,7 +23,7 @@ if not contas:
 contas_dict = {conta[1]: conta[0] for conta in contas}
 
 # Início dos filtros horizontais
-st.markdown("### Filtros do Fluxo de Caixa, Gráfico e Tabela")
+st.markdown("### Filtros ")
 
 hoje = datetime.date.today()
 meses = {i: calendar.month_name[i] for i in range(1, 13)}
@@ -175,6 +175,7 @@ else:
             st.info("Não há dados suficientes para o gráfico/tabela no período/conta filtrado.")
     else:
         st.info("Não há dados para o período/conta filtrado selecionado.")
+
 
 
 
