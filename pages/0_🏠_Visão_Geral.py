@@ -46,6 +46,109 @@ with filtro_cols[0]:
 with filtro_cols[1]:
     ano_selecionado = st.selectbox("Ano", options=anos, index=index_ano)
 
+# --- INÍCIO DA SEÇÃO: BOTÕES DE ACESSO RÁPIDO ---
+st.markdown("### Acesso Rápido")
+col1, col2, col3 = st.columns(3)
+
+# Botão para Adicionar Receita
+# Botão para Adicionar Receita
+with col1:
+    with st.popover("➕ Adicionar Receita", use_container_width=True):
+        st.markdown("#### Nova Receita")
+        categorias_receita = database.get_categorias(user_id, "receita")
+        if not contas or not categorias_receita:
+            st.warning("É preciso ter ao menos uma conta e uma categoria de receita cadastradas.")
+        else:
+            contas_dict_rec = {conta[1]: conta[0] for conta in contas}
+            categorias_list_rec = [cat[1] for cat in categorias_receita]
+            with st.form("form_popover_receita"):
+                descricao_rec = st.text_input("Descrição da Receita", key="pop_rec_desc")
+                valor_rec = st.number_input("Valor", min_value=0.01, format="%.2f", key="pop_rec_val")
+                data_rec = st.date_input("Data", value=utils.get_local_today(), key="pop_rec_data")
+                categoria_nome_rec = st.selectbox("Categoria", options=categorias_list_rec, key="pop_rec_cat")
+                conta_nome_rec = st.selectbox("Conta", options=list(contas_dict_rec.keys()), key="pop_rec_conta")
+
+                if st.form_submit_button("Salvar Receita"):
+                    if not descricao_rec.strip() or valor_rec <= 0:
+                        st.warning("Descrição é obrigatória e o valor deve ser positivo.")
+                    else:
+                        try:
+                            # CORREÇÃO: Passando os parâmetros de recorrência como padrão (None e 1)
+                            database.insert_receita(
+                                user_id, contas_dict_rec[conta_nome_rec], data_rec.isoformat(), 
+                                valor_rec, categoria_nome_rec, descricao_rec.strip(), 
+                                None, 1  # Lançamento único
+                            )
+                            st.toast("Receita adicionada!", icon="✅")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Ocorreu um erro ao salvar a receita: {e}")
+
+# Botão para Adicionar Despesa
+with col2:
+    with st.popover("➖ Adicionar Despesa", use_container_width=True):
+        st.markdown("#### Nova Despesa")
+        categorias_despesa = database.get_categorias(user_id, "despesa")
+        if not contas or not categorias_despesa:
+            st.warning("É preciso ter ao menos uma conta e uma categoria de despesa cadastradas.")
+        else:
+            contas_dict_desp = {conta[1]: conta[0] for conta in contas}
+            categorias_list_desp = [cat[1] for cat in categorias_despesa]
+            with st.form("form_popover_despesa"):
+                descricao_desp = st.text_input("Descrição da Despesa", key="pop_desp_desc")
+                valor_desp = st.number_input("Valor Total", min_value=0.01, format="%.2f", key="pop_desp_val")
+                data_compra_desp = st.date_input("Data da Compra", value=utils.get_local_today(), key="pop_desp_data")
+                tipo_pagamento_desp = st.radio("Pagamento", ["Crédito", "Débito"], horizontal=True, key="pop_desp_tipo")
+                parcelas_desp = st.number_input("Parcelas", min_value=1, step=1, value=1, key="pop_desp_parc")
+                categoria_desp = st.selectbox("Categoria", options=categorias_list_desp, key="pop_desp_cat")
+                conta_nome_desp = st.selectbox("Conta", options=list(contas_dict_desp.keys()), key="pop_desp_conta")
+
+                if st.form_submit_button("Salvar Despesa"):
+                    if not descricao_desp.strip() or valor_desp <= 0:
+                        st.warning("Descrição é obrigatória e o valor deve ser positivo.")
+                    else:
+                        try:
+                            # CORREÇÃO: Passando os parâmetros de recorrência como padrão (None e 1)
+                            database.insert_despesa(
+                                user_id, contas_dict_desp[conta_nome_desp], data_compra_desp.isoformat(), 
+                                valor_desp, categoria_desp, tipo_pagamento_desp, parcelas_desp, 
+                                descricao_desp.strip(), None, 1 # Lançamento único, sem recorrência
+                            )
+                            st.toast("Despesa adicionada!", icon="✅")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Ocorreu um erro ao salvar a despesa: {e}")
+with col3:
+    with st.popover("🔄 Transferir Entre Contas", use_container_width=True):
+        st.markdown("#### Nova Transferência")
+        if len(contas) < 2:
+            st.warning("Você precisa de pelo menos duas contas para fazer uma transferência.")
+        else:
+            contas_dict_transf = {conta[1]: conta[0] for conta in contas}
+            lista_nomes_contas = list(contas_dict_transf.keys())
+            
+            with st.form("form_popover_transferencia"):
+                conta_origem_nome = st.selectbox("Conta de Origem", options=lista_nomes_contas, key="pop_transf_origem")
+                conta_destino_nome = st.selectbox("Conta de Destino", options=lista_nomes_contas, index=min(1, len(lista_nomes_contas)-1), key="pop_transf_destino")
+                valor_transf = st.number_input("Valor", min_value=0.01, format="%.2f", key="pop_transf_valor")
+                data_transf = st.date_input("Data da Transferência", value=utils.get_local_today(), key="pop_transf_data")
+
+                if st.form_submit_button("Confirmar Transferência"):
+                    if conta_origem_nome == conta_destino_nome:
+                        st.error("As contas de origem e destino devem ser diferentes.")
+                    elif valor_transf <= 0:
+                        st.error("O valor deve ser maior que zero.")
+                    else:
+                        try:
+                            conta_origem_id = contas_dict_transf[conta_origem_nome]
+                            conta_destino_id = contas_dict_transf[conta_destino_nome]
+                            database.realizar_transferencia(user_id, conta_origem_id, conta_destino_id, valor_transf, data_transf)
+                            st.toast("Transferência realizada com sucesso!", icon="✅")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro: {e}")
+st.markdown("---")
+
 # --- FILTRAGEM DO DATAFRAME ---
 df_filtrado = df.copy()
 if mes_selecionado != "Todos":
@@ -161,6 +264,7 @@ else:
             st.info("Não há dados suficientes para o gráfico/tabela no período/conta filtrado.")
     else:
         st.info("Não há dados para o período/conta filtrado selecionado.")
+
 
 
 
