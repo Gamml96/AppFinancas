@@ -107,7 +107,9 @@ with tab_despesas:
         meses_keys = list(meses.keys())
         meses_keys.insert(0, "Todos")
         anos = sorted(df["Data Vencimento"].dt.year.unique())
-        
+        ano_atual = datetime.datetime.now().year
+        index_ano = anos.index(ano_atual) if ano_atual in anos else 0
+
         filtro_cols = st.columns(5)
         with filtro_cols[0]:
             mes_selecionado = st.selectbox(
@@ -117,7 +119,7 @@ with tab_despesas:
                 key="mes_vencimento_filtro"
             )
         with filtro_cols[1]:
-            ano_selecionado = st.selectbox("Ano", options=anos, key="ano_vencimento_filtro")
+            ano_selecionado = st.selectbox("Ano", options=anos, index=index_ano, key="ano_receita_filtro")
         with filtro_cols[2]:
             categoria_filtro = st.selectbox("Categoria", options=["Todas"] + categorias_list, key="categoria_filtro")
         with filtro_cols[3]:
@@ -334,4 +336,5 @@ with tab_simulacao:
             hide_index=True,
             use_container_width=True
         )
+
 
