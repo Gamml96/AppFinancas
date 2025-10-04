@@ -128,14 +128,22 @@ with tab_despesas:
             (df_filtrado["Data Vencimento"].dt.month == mes_selecionado) &
             (df_filtrado["Data Vencimento"].dt.year == ano_selecionado)
         ]
+        if mes_selecionado != "Todos":
+            df_filtrado = df_filtrado[
+                (df_filtrado["Data Vencimento"].dt.month == mes_selecionado) &
+                (df_filtrado["Data Vencimento"].dt.year == ano_selecionado)
+            ]
+        else:
+            df_filtrado = df_filtrado[
+                (df_filtrado["Data Vencimento"].dt.year == ano_selecionado)
+            ]
         if categoria_filtro != "Todas":
             df_filtrado = df_filtrado[df_filtrado["Categoria"] == categoria_filtro]
         if conta_filtro != "Todas":
             df_filtrado = df_filtrado[df_filtrado["Conta"] == conta_filtro]
         if tipo_filtro != "Todos":
             df_filtrado = df_filtrado[df_filtrado["Tipo"] == tipo_filtro]
-        if mes_selecionado != "Todos":
-            df_filtrado = df_filtrado[df_filtrado["Data Vencimento"].dt.month == mes_selecionado]
+
 
         st.markdown("### Despesas Lançadas (Filtradas)")
         st.warning(
@@ -325,4 +333,5 @@ with tab_simulacao:
             hide_index=True,
             use_container_width=True
         )
+
 
