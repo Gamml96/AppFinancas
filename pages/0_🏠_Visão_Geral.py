@@ -1,53 +1,39 @@
 import streamlit as st
-import streamlit_authenticator as stauth
 import database
-import datetime
 import pandas as pd
-import utils
-import plotly.express as px
-from dateutil.relativedelta import relativedelta
+import datetime
 import calendar
+import utils
 
-# --- Guarda de Autenticação ---
+# --- AUTENTICAÇÃO ---
 profile, user_id, username, credentials, authenticator = utils.check_authentication()
-
 st.title("Visão Geral Financeira")
 st.markdown("---")
 
-# Busca contas para os filtros
+# --- BUSCA DE CONTAS ---
 contas = database.get_contas(user_id)
 if not contas:
     st.warning("Cadastre pelo menos uma conta para começar.")
     st.stop()
-
 contas_dict = {conta[1]: conta[0] for conta in contas}
 
-# Início dos filtros horizontais
-st.markdown("### Filtros ")
-
+# --- FILTROS HORIZONTAIS ---
 hoje = datetime.date.today()
 meses = {i: calendar.month_name[i] for i in range(1, 13)}
 meses_keys = list(meses.keys())
 meses_keys.insert(0, "Todos")
-hoje = datetime.date.today()
 mes_atual = hoje.month
 index_mes = meses_keys.index(mes_atual) if mes_atual in meses_keys else 0
 
 filtro_cols = st.columns(3)
 with filtro_cols[2]:
     conta_filtro = st.selectbox("Conta", options=["Todas"] + list(contas_dict.keys()))
-# Carrega transações para montar anos e aplicar filtros
 transacoes = database.get_transacoes_consolidadas(
     user_id, conta_id=contas_dict.get(conta_filtro) if conta_filtro != "Todas" else None
 )
 df = pd.DataFrame(transacoes, columns=["data", "descricao", "valor"])
 df["data"] = pd.to_datetime(df["data"])
-
-# Monta os anos do filtro de acordo com os dados do DataFrame
-if not df.empty:
-    anos = sorted(df["data"].dt.year.unique())
-else:
-    anos = [hoje.year]
+anos = sorted(df["data"].dt.year.unique()) if not df.empty else [hoje.year]
 index_ano = anos.index(hoje.year) if hoje.year in anos else 0
 
 with filtro_cols[0]:
@@ -60,20 +46,36 @@ with filtro_cols[0]:
 with filtro_cols[1]:
     ano_selecionado = st.selectbox("Ano", options=anos, index=index_ano)
 
-# ==== filtragem para gráfico/tabela ====
+# --- FILTRAGEM DO DATAFRAME ---
 df_filtrado = df.copy()
 if mes_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["data"].dt.month == mes_selecionado]
 df_filtrado = df_filtrado[df_filtrado["data"].dt.year == ano_selecionado]
 
-# ================= Lançamentos Próximos ==========================
-st.markdown("### Lançamentos Próximos")
+# --- PRÓXIMOS LANÇAMENTOS ---
 conta_id_filtro = contas_dict.get(conta_filtro) if conta_filtro != "Todas" else None
 proximos_lancamentos = database.get_proximos_lancamentos(user_id, dias_futuros=3, conta_id=conta_id_filtro)
+
+# --- SALDO ATUAL CONSOLIDADO (HOJE) ---
+df = df.sort_values(by="data")
+df['entradas'] = df['valor'].apply(lambda x: x if x > 0 else 0)
+df['saidas'] = df['valor'].apply(lambda x: abs(x) if x < 0 else 0)
+fluxo_tudo = df.groupby('data').agg(
+    entradas=('entradas', 'sum'),
+    saidas=('saidas', 'sum')
+).reset_index()
+fluxo_tudo['saldo_dia'] = fluxo_tudo['entradas'] - fluxo_tudo['saidas']
+fluxo_tudo['saldo_acumulado'] = fluxo_tudo['saldo_dia'].cumsum()
+saldo_atual_valor = fluxo_tudo[fluxo_tudo['data'].dt.date <= utils.get_local_today()]['saldo_acumulado'].iloc[-1] if not fluxo_tudo.empty else 0.0
+
+st.metric("Saldo Atual Consolidado (Hoje)", utils.formatar_moeda_brl(saldo_atual_valor))
+st.markdown("---")
+
+# --- LANÇAMENTOS PRÓXIMOS ---
 if not proximos_lancamentos:
     st.info("Nenhum lançamento previsto para os próximos 3 dias.")
 else:
-    st.write("Fique de olho nas suas próximas movimentações:")
+    st.markdown("### Lançamentos Próximos")
     for data_lanc, desc, val, tipo in proximos_lancamentos:
         hoje_dt = utils.get_local_today()
         if data_lanc == hoje_dt:
@@ -87,31 +89,12 @@ else:
             st.success(f"**{dia_str}:** {desc.upper()} | **+ {valor_formatado}**", icon="💰")
         else:
             st.error(f"**{dia_str}:** {desc.upper()} | **- {valor_formatado}**", icon="💸")
-
 st.markdown("---")
 
-# --- FLUXO DE CAIXA DIÁRIO (CÁLCULO E EXIBIÇÃO) ---
-
+# --- FLUXO DE CAIXA DIÁRIO (GRÁFICO + TABELA) ---
 if df.empty:
     st.info("Você ainda não possui transações para exibir o fluxo de caixa.")
 else:
-    df = df.sort_values(by="data")
-    df['entradas'] = df['valor'].apply(lambda x: x if x > 0 else 0)
-    df['saidas'] = df['valor'].apply(lambda x: abs(x) if x < 0 else 0)
-
-    # FLUXO CONSOLIDADO (para saldo real até hoje)
-    fluxo_tudo = df.groupby('data').agg(
-        entradas=('entradas', 'sum'),
-        saidas=('saidas', 'sum')
-    ).reset_index()
-    fluxo_tudo['saldo_dia'] = fluxo_tudo['entradas'] - fluxo_tudo['saidas']
-    fluxo_tudo['saldo_acumulado'] = fluxo_tudo['saldo_dia'].cumsum()
-    saldo_atual_valor = fluxo_tudo[fluxo_tudo['data'].dt.date <= utils.get_local_today()]['saldo_acumulado'].iloc[-1] if not fluxo_tudo.empty else 0.0
-
-    st.metric("Saldo Atual Consolidado (Hoje)", utils.formatar_moeda_brl(saldo_atual_valor))
-    st.markdown("---")
-
-    # --- BLOCO COM A CORREÇÃO ---
     if not df_filtrado.empty:
         df_temp = df_filtrado.copy().sort_values(by="data")
         df_temp['entradas'] = df_temp['valor'].apply(lambda x: x if x > 0 else 0)
@@ -130,7 +113,7 @@ else:
             fluxo_diario = fluxo_diario.set_index('data').reindex(todos_os_dias, fill_value=0).reset_index().rename(columns={'index': 'data'})
             fluxo_diario['saldo_dia'] = fluxo_diario['entradas'] - fluxo_diario['saidas']
 
-            # CORREÇÃO: calcular saldo até o dia anterior ao início do filtro!
+            # CORREÇÃO DO SALDO ACUMULADO PELO HISTÓRICO
             saldo_ate_dia_anterior = df[df['data'] < data_inicio]['valor'].sum() if not df.empty else 0.0
             fluxo_diario['saldo_acumulado'] = fluxo_diario['saldo_dia'].cumsum() + saldo_ate_dia_anterior
 
@@ -139,6 +122,7 @@ else:
             )
             st.markdown("---")
 
+            # Gradiente de cor na coluna saldo acumulado
             def highlight_today(row):
                 if row.data.date() == utils.get_local_today():
                     return ['background-color: #3D5320'] * len(row)
@@ -146,9 +130,8 @@ else:
 
             df_display = fluxo_diario.sort_values(by="data", ascending=True)[
                 ["data", "entradas", "saidas", "saldo_acumulado"]]
-            vmin = 500
+            vmin = 0
             vmax = df_display["saldo_acumulado"].max()
-
             styled_df = (
                 df_display.style
                 .apply(highlight_today, axis=1)
@@ -157,9 +140,10 @@ else:
                     "saidas": utils.formatar_moeda_brl,
                     "saldo_acumulado": utils.formatar_moeda_brl
                 })
-                .background_gradient(subset=["saldo_acumulado"], cmap="RdYlGn", vmin=vmin, vmax=vmax)  # Aplica gradiente na coluna saldo
+                .background_gradient(subset=["saldo_acumulado"], cmap="RdYlGn", vmin=vmin, vmax=vmax)
                 .hide(axis="index")
             )
+
             st.dataframe(
                 styled_df,
                 column_config={
@@ -175,12 +159,3 @@ else:
             st.info("Não há dados suficientes para o gráfico/tabela no período/conta filtrado.")
     else:
         st.info("Não há dados para o período/conta filtrado selecionado.")
-
-
-
-
-
-
-
-
-
