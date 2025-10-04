@@ -103,10 +103,11 @@ with tab_despesas:
         # ====== FILTROS AVANÇADOS ======
         st.markdown("### Filtros das Despesas")
 
-        # Filtro de mês/ano
+        # Filtro de mês/ano (com 'Todos')
         meses = {i: calendar.month_name[i] for i in range(1, 13)}
         meses_keys = list(meses.keys())
-        meses_keys.insert(0, "Todos") 
+        meses_keys.insert(0, "Todos")  # Adiciona "Todos"
+
         anos = sorted(df["Data Vencimento"].dt.year.unique())
         mes_selecionado = st.selectbox(
             "Mês de vencimento",
@@ -114,20 +115,15 @@ with tab_despesas:
             format_func=lambda x: "Todos" if x == "Todos" else meses[x],
             key="mes_vencimento_filtro"
         )
-        ano_selecionado = st.selectbox("Ano de vencimento",
-                                       options=anos,
-                                       key="ano_vencimento_filtro")
+        ano_selecionado = st.selectbox("Ano de vencimento", options=anos, key="ano_vencimento_filtro")
 
         categoria_filtro = st.selectbox("Categoria", options=["Todas"] + categorias_list, key="categoria_filtro")
         conta_filtro = st.selectbox("Conta", options=["Todas"] + list(contas_dict.keys()), key="conta_filtro")
         tipo_filtro = st.selectbox("Tipo", options=["Todos", "Crédito", "Débito"], key="tipo_filtro")
 
         df_filtrado = df.copy()
-        # Filtra mês/ano
-        df_filtrado = df_filtrado[
-            (df_filtrado["Data Vencimento"].dt.month == mes_selecionado) &
-            (df_filtrado["Data Vencimento"].dt.year == ano_selecionado)
-        ]
+
+        # Filtro de mês e ano: se "Todos", ignora mês e filtra só ano
         if mes_selecionado != "Todos":
             df_filtrado = df_filtrado[
                 (df_filtrado["Data Vencimento"].dt.month == mes_selecionado) &
@@ -137,13 +133,13 @@ with tab_despesas:
             df_filtrado = df_filtrado[
                 (df_filtrado["Data Vencimento"].dt.year == ano_selecionado)
             ]
+
         if categoria_filtro != "Todas":
             df_filtrado = df_filtrado[df_filtrado["Categoria"] == categoria_filtro]
         if conta_filtro != "Todas":
             df_filtrado = df_filtrado[df_filtrado["Conta"] == conta_filtro]
         if tipo_filtro != "Todos":
             df_filtrado = df_filtrado[df_filtrado["Tipo"] == tipo_filtro]
-
 
         st.markdown("### Despesas Lançadas (Filtradas)")
         st.warning(
@@ -333,5 +329,3 @@ with tab_simulacao:
             hide_index=True,
             use_container_width=True
         )
-
-
