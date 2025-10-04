@@ -7,7 +7,6 @@ import utils
 import plotly.express as px
 from dateutil.relativedelta import relativedelta
 import calendar
-import matplotlib
 
 # --- Guarda de Autenticação ---
 profile, user_id, username, credentials, authenticator = utils.check_authentication()
@@ -23,18 +22,19 @@ if not contas:
 
 contas_dict = {conta[1]: conta[0] for conta in contas}
 
-# Filtros horizontais
+# Início dos filtros horizontais
 st.markdown("### Filtros do Fluxo de Caixa, Gráfico e Tabela")
 
 hoje = datetime.date.today()
 meses = {i: calendar.month_name[i] for i in range(1, 13)}
 meses_keys = list(meses.keys())
 meses_keys.insert(0, "Todos")
+hoje = datetime.date.today()
 mes_atual = hoje.month
 index_mes = meses_keys.index(mes_atual) if mes_atual in meses_keys else 0
 
 filtro_cols = st.columns(3)
-with filtro_cols[1]:
+with filtro_cols[2]:
     conta_filtro = st.selectbox("Conta", options=["Todas"] + list(contas_dict.keys()))
 # Carrega transações para montar anos e aplicar filtros
 transacoes = database.get_transacoes_consolidadas(
@@ -52,16 +52,43 @@ index_ano = anos.index(hoje.year) if hoje.year in anos else 0
 
 with filtro_cols[0]:
     mes_selecionado = st.selectbox(
-        "Mês", options=meses_keys, format_func=lambda x: "Todos" if x == "Todos" else meses[x], index=index_mes
+        "Mês",
+        options=meses_keys,
+        format_func=lambda x: "Todos" if x == "Todos" else meses[x],
+        index=index_mes
     )
-with filtro_cols[2]:
+with filtro_cols[1]:
     ano_selecionado = st.selectbox("Ano", options=anos, index=index_ano)
 
-# ==== Filtragem para gráfico/tabela ====
+# ==== filtragem para gráfico/tabela ====
 df_filtrado = df.copy()
 if mes_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["data"].dt.month == mes_selecionado]
 df_filtrado = df_filtrado[df_filtrado["data"].dt.year == ano_selecionado]
+
+# ================= Lançamentos Próximos ==========================
+st.markdown("### Lançamentos Próximos")
+conta_id_filtro = contas_dict.get(conta_filtro) if conta_filtro != "Todas" else None
+proximos_lancamentos = database.get_proximos_lancamentos(user_id, dias_futuros=3, conta_id=conta_id_filtro)
+if not proximos_lancamentos:
+    st.info("Nenhum lançamento previsto para os próximos 3 dias.")
+else:
+    st.write("Fique de olho nas suas próximas movimentações:")
+    for data_lanc, desc, val, tipo in proximos_lancamentos:
+        hoje_dt = utils.get_local_today()
+        if data_lanc == hoje_dt:
+            dia_str = "Hoje"
+        elif data_lanc == hoje_dt + datetime.timedelta(days=1):
+            dia_str = "Amanhã"
+        else:
+            dia_str = data_lanc.strftime('%d/%m/%Y')
+        valor_formatado = utils.formatar_moeda_brl(val)
+        if tipo == 'receita':
+            st.success(f"**{dia_str}:** {desc.upper()} | **+ {valor_formatado}**", icon="💰")
+        else:
+            st.error(f"**{dia_str}:** {desc.upper()} | **- {valor_formatado}**", icon="💸")
+
+st.markdown("---")
 
 # ================= FLUXO DE CAIXA PRINCIPAL ======================
 st.header("Fluxo de Caixa Diário")
@@ -120,20 +147,11 @@ else:
 
             df_display = fluxo_diario.sort_values(by="data", ascending=True)[
                 ["data", "entradas", "saidas", "saldo_acumulado"]]
-
-            # Gradiente vermelho-cinza-verde no saldo
-            cmap = matplotlib.colors.LinearSegmentedColormap.from_list("custom", ["#C82333", "#CCCCCC", "#27816F"])
-
-            styled_df = df_display.style \
-                .background_gradient(subset=["saldo_acumulado"], cmap=cmap, axis=None) \
-                .apply(highlight_today, axis=1) \
-                .format({
-                    "entradas": utils.formatar_moeda_brl,
-                    "saidas": utils.formatar_moeda_brl,
-                    "saldo_acumulado": utils.formatar_moeda_brl
-                }) \
-                .hide(axis="index")
-
+            styled_df = df_display.style.apply(highlight_today, axis=1).format(
+                {"entradas": utils.formatar_moeda_brl,
+                 "saidas": utils.formatar_moeda_brl,
+                 "saldo_acumulado": utils.formatar_moeda_brl}
+            ).hide(axis="index")
             st.dataframe(
                 styled_df,
                 column_config={
@@ -148,24 +166,4 @@ else:
         else:
             st.info("Não há dados suficientes para o gráfico/tabela no período/conta filtrado.")
 
-# ================= Lançamentos Próximos ==========================
-st.markdown("### Lançamentos Próximos")
-conta_id_filtro = contas_dict.get(conta_filtro) if conta_filtro != "Todas" else None
-proximos_lancamentos = database.get_proximos_lancamentos(user_id, dias_futuros=3, conta_id=conta_id_filtro)
-if not proximos_lancamentos:
-    st.info("Nenhum lançamento previsto para os próximos 3 dias.")
-else:
-    st.write("Fique de olho nas suas próximas movimentações:")
-    for data_lanc, desc, val, tipo in proximos_lancamentos:
-        hoje_dt = utils.get_local_today()
-        if data_lanc == hoje_dt:
-            dia_str = "Hoje"
-        elif data_lanc == hoje_dt + datetime.timedelta(days=1):
-            dia_str = "Amanhã"
-        else:
-            dia_str = data_lanc.strftime('%d/%m/%Y')
-        valor_formatado = utils.formatar_moeda_brl(val)
-        if tipo == 'receita':
-            st.success(f"**{dia_str}:** {desc.upper()} | **+ {valor_formatado}**", icon="💰")
-        else:
-            st.error(f"**{dia_str}:** {desc.upper()} | **- {valor_formatado}**", icon="💸")
+
