@@ -66,6 +66,8 @@ else:
     meses_keys = list(meses.keys())
     meses_keys.insert(0, "Todos")
     anos = sorted(df["Data"].dt.year.unique())
+    ano_atual = datetime.datetime.now().year
+    index_ano = anos.index(ano_atual) if ano_atual in anos else 0
 
     filtro_cols = st.columns(4)
     with filtro_cols[0]:
@@ -76,7 +78,7 @@ else:
             key="mes_receita_filtro"
         )
     with filtro_cols[1]:
-        ano_selecionado = st.selectbox("Ano", options=anos, key="ano_receita_filtro")
+        ano_selecionado = st.selectbox("Ano", options=anos, index=index_ano, key="ano_receita_filtro")
     with filtro_cols[2]:
         categoria_filtro = st.selectbox("Categoria", options=["Todas"] + categorias_list, key="categoria_receita_filtro")
     with filtro_cols[3]:
@@ -128,3 +130,4 @@ else:
             st.rerun()
         else:
             st.toast("Nenhuma receita selecionada.", icon="⚠️")
+
