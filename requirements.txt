@@ -12,4 +12,5 @@ requests
 scikit-learn
 joblib
 google-generativeai
+matplotlib
 openai
