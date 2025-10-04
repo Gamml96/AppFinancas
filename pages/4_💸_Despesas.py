@@ -106,11 +106,14 @@ with tab_despesas:
         # Filtro de mês/ano
         meses = {i: calendar.month_name[i] for i in range(1, 13)}
         meses_keys = list(meses.keys())
+        meses_keys.insert(0, "Todos") 
         anos = sorted(df["Data Vencimento"].dt.year.unique())
-        mes_selecionado = st.selectbox("Mês de vencimento",
-                                       options=meses_keys,
-                                       format_func=lambda x: meses[x],
-                                       key="mes_vencimento_filtro")
+        mes_selecionado = st.selectbox(
+            "Mês de vencimento",
+            options=meses_keys,
+            format_func=lambda x: "Todos" if x == "Todos" else meses[x],
+            key="mes_vencimento_filtro"
+        )
         ano_selecionado = st.selectbox("Ano de vencimento",
                                        options=anos,
                                        key="ano_vencimento_filtro")
@@ -131,6 +134,8 @@ with tab_despesas:
             df_filtrado = df_filtrado[df_filtrado["Conta"] == conta_filtro]
         if tipo_filtro != "Todos":
             df_filtrado = df_filtrado[df_filtrado["Tipo"] == tipo_filtro]
+        if mes_selecionado != "Todos":
+            df_filtrado = df_filtrado[df_filtrado["Data Vencimento"].dt.month == mes_selecionado]
 
         st.markdown("### Despesas Lançadas (Filtradas)")
         st.warning(
@@ -320,3 +325,4 @@ with tab_simulacao:
             hide_index=True,
             use_container_width=True
         )
+
