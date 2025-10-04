@@ -146,6 +146,9 @@ else:
 
             df_display = fluxo_diario.sort_values(by="data", ascending=True)[
                 ["data", "entradas", "saidas", "saldo_acumulado"]]
+            vmin = 500
+            vmax = df_display["saldo_acumulado"].max()
+
             styled_df = (
                 df_display.style
                 .apply(highlight_today, axis=1)
@@ -154,7 +157,7 @@ else:
                     "saidas": utils.formatar_moeda_brl,
                     "saldo_acumulado": utils.formatar_moeda_brl
                 })
-                .background_gradient(subset=["saldo_acumulado"], cmap="RdYlGn")  # Aplica gradiente na coluna saldo
+                .background_gradient(subset=["saldo_acumulado"], cmap="RdYlGn", vmin=vmin, vmax=vmax)  # Aplica gradiente na coluna saldo
                 .hide(axis="index")
             )
             st.dataframe(
@@ -172,6 +175,7 @@ else:
             st.info("Não há dados suficientes para o gráfico/tabela no período/conta filtrado.")
     else:
         st.info("Não há dados para o período/conta filtrado selecionado.")
+
 
 
 
