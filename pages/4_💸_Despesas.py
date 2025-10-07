@@ -119,7 +119,7 @@ with tab_despesas:
                 key="mes_vencimento_filtro"
             )
         with filtro_cols[1]:
-            ano_selecionado = st.selectbox("Ano", options=anos, index=index_ano, key="ano_receita_filtro")
+            ano_selecionado = st.selectbox("Ano", options=["Todos"] + anos, index=index_ano, key="ano_receita_filtro")
         with filtro_cols[2]:
             categoria_filtro = st.selectbox("Categoria", options=["Todas"] + categorias_list, key="categoria_filtro")
         with filtro_cols[3]:
@@ -130,15 +130,19 @@ with tab_despesas:
 
         df_filtrado = df.copy()
 
-        # Filtro de mês e ano: se "Todos", ignora mês e filtra só ano
-        if mes_selecionado != "Todos":
+        # Filtro de mês e ano
+        if mes_selecionado != "Todos" and ano_selecionado != "Todos":
             df_filtrado = df_filtrado[
                 (df_filtrado["Data Vencimento"].dt.month == mes_selecionado) &
                 (df_filtrado["Data Vencimento"].dt.year == ano_selecionado)
             ]
-        else:
+        elif mes_selecionado != "Todos" and ano_selecionado == "Todos":
             df_filtrado = df_filtrado[
-                (df_filtrado["Data Vencimento"].dt.year == ano_selecionado)
+                df_filtrado["Data Vencimento"].dt.month == mes_selecionado
+            ]
+        elif mes_selecionado == "Todos" and ano_selecionado != "Todos":
+            df_filtrado = df_filtrado[
+                df_filtrado["Data Vencimento"].dt.year == ano_selecionado
             ]
 
         if categoria_filtro != "Todas":
@@ -336,3 +340,4 @@ with tab_simulacao:
             hide_index=True,
             use_container_width=True
         )
+
