@@ -78,7 +78,7 @@ else:
             key="mes_receita_filtro"
         )
     with filtro_cols[1]:
-        ano_selecionado = st.selectbox("Ano", options=anos, index=index_ano, key="ano_receita_filtro")
+        ano_selecionado = st.selectbox("Ano", options="Todos" + anos, index=0, key="ano_receita_filtro")
     with filtro_cols[2]:
         categoria_filtro = st.selectbox("Categoria", options=["Todas"] + categorias_list, key="categoria_receita_filtro")
     with filtro_cols[3]:
@@ -86,14 +86,18 @@ else:
 
     # ==== FILTRAGEM ====
     df_filtrado = df.copy()
-    if mes_selecionado != "Todos":
+    if mes_selecionado != "Todos" and ano_selecionado != "Todos":
         df_filtrado = df_filtrado[
             (df_filtrado["Data"].dt.month == mes_selecionado) &
             (df_filtrado["Data"].dt.year == ano_selecionado)
         ]
-    else:
+    elif mes_selecionado != "Todos" and ano_selecionado == "Todos":
         df_filtrado = df_filtrado[
-            (df_filtrado["Data"].dt.year == ano_selecionado)
+            df_filtrado["Data"].dt.month == mes_selecionado
+        ]
+    elif mes_selecionado == "Todos" and ano_selecionado != "Todos":
+        df_filtrado = df_filtrado[
+            df_filtrado["Data"].dt.year == ano_selecionado
         ]
     if categoria_filtro != "Todas":
         df_filtrado = df_filtrado[df_filtrado["Categoria"] == categoria_filtro]
@@ -130,4 +134,5 @@ else:
             st.rerun()
         else:
             st.toast("Nenhuma receita selecionada.", icon="⚠️")
+
 
