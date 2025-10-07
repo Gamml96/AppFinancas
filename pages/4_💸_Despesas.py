@@ -35,11 +35,12 @@ with tab_despesas:
                                 help="Para parcelas, insira o valor total da compra. Para recorrências, insira o valor de cada ocorrência.")
         data_compra = st.date_input("Data da Primeira Ocorrência/Compra", value=utils.get_local_today())
 
-        coluna1,coluna2 = st.columns([3,1])
+        coluna1,coluna2 = st.columns([4,1])
 
         with coluna1:
             categoria = st.selectbox("Categoria", options=categorias_list, key="catbox")
         with coluna2:
+            st.text(" ")
             prever = st.form_submit_button("Sugerir categoria")
 
         # Após clicar em prever, sugira a categoria destacando no selectbox
@@ -352,6 +353,7 @@ with tab_simulacao:
             hide_index=True,
             use_container_width=True
         )
+
 
 
 
