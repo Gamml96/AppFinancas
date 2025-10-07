@@ -119,7 +119,7 @@ with tab_despesas:
                 key="mes_vencimento_filtro"
             )
         with filtro_cols[1]:
-            ano_selecionado = st.selectbox("Ano", options=["Todos"] + anos, index=index_ano, key="ano_receita_filtro")
+            ano_selecionado = st.selectbox("Ano", options=["Todos"] + anos, index=0, key="ano_receita_filtro")
         with filtro_cols[2]:
             categoria_filtro = st.selectbox("Categoria", options=["Todas"] + categorias_list, key="categoria_filtro")
         with filtro_cols[3]:
@@ -340,4 +340,5 @@ with tab_simulacao:
             hide_index=True,
             use_container_width=True
         )
+
 
