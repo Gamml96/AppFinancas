@@ -6,7 +6,6 @@ import utils
 from dateutil.relativedelta import relativedelta
 import plotly.graph_objects as go
 import calendar
-from ai_module import prever_categoria
 
 # Guarda de Autenticação
 profile, user_id, username, credentials, authenticator = utils.check_authentication()
@@ -34,23 +33,7 @@ with tab_despesas:
         valor = st.number_input("Valor", min_value=0.01, format="%.2f",
                                 help="Para parcelas, insira o valor total da compra. Para recorrências, insira o valor de cada ocorrência.")
         data_compra = st.date_input("Data da Primeira Ocorrência/Compra", value=utils.get_local_today())
-
-        coluna1,coluna2 = st.columns([4,1])
-
-        with coluna1:
-            categoria = st.selectbox("Categoria", options=categorias_list, key="catbox")
-        with coluna2:
-            st.text(" ")
-            prever = st.form_submit_button("Sugerir categoria")
-
-        # Após clicar em prever, sugira a categoria destacando no selectbox
-        if prever and descricao and len(descricao) > 3:
-            categoria_sugerida = prever_categoria(descricao)
-            if categoria_sugerida in categorias_list:
-                st.session_state["catbox"] = categoria_sugerida
-                st.info(f"Sugestão IA: {categoria_sugerida}")
-    
-        # categoria = st.selectbox("Categoria", options=categorias_list, index=idx_default)
+        categoria = st.selectbox("Categoria", options=categorias_list)
         conta_nome = st.selectbox("Conta", options=list(contas_dict.keys()))
 
         st.markdown("---")
@@ -353,10 +336,3 @@ with tab_simulacao:
             hide_index=True,
             use_container_width=True
         )
-
-
-
-
-
-
-
