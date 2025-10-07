@@ -78,7 +78,7 @@ else:
             key="mes_receita_filtro"
         )
     with filtro_cols[1]:
-        ano_selecionado = st.selectbox("Ano", options="Todos" + anos, index=0, key="ano_receita_filtro")
+        ano_selecionado = st.selectbox("Ano", options=["Todos"] + anos, index=0, key="ano_receita_filtro")
     with filtro_cols[2]:
         categoria_filtro = st.selectbox("Categoria", options=["Todas"] + categorias_list, key="categoria_receita_filtro")
     with filtro_cols[3]:
@@ -134,5 +134,6 @@ else:
             st.rerun()
         else:
             st.toast("Nenhuma receita selecionada.", icon="⚠️")
+
 
 
