@@ -45,7 +45,7 @@ with tab_despesas:
 
         # Após clicar em prever, sugira a categoria destacando no selectbox
         if prever and descricao and len(descricao) > 3:
-            categoria_sugerida = prever_categoria(descricao, categorias_list)
+            categoria_sugerida = prever_categoria(descricao)
             if categoria_sugerida in categorias_list:
                 st.session_state["catbox"] = categoria_sugerida
                 st.info(f"Sugestão IA: {categoria_sugerida}")
@@ -353,6 +353,7 @@ with tab_simulacao:
             hide_index=True,
             use_container_width=True
         )
+
 
 
 
