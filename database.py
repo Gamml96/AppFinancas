@@ -254,6 +254,91 @@ def get_or_create_categoria_despesa(user_id, nome_categoria):
 def get_or_create_categoria_receita(user_id, nome_categoria):
     return get_or_create_categoria(user_id, nome_categoria, 'receita')
 
+
+# -------- Subcategorias --------
+
+def insert_subcategoria(user_id, categoria_id, nome):
+    """
+    Cria uma subcategoria ligada a uma categoria existente.
+    Evita duplicados por (user_id, categoria_id, nome).
+    """
+    query = """
+        INSERT INTO subcategorias (user_id, categoria_id, nome)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (user_id, categoria_id, nome) DO NOTHING
+    """
+    _execute_query(query, (user_id, categoria_id, nome), commit=True)
+    st.cache_data.clear()
+
+
+@st.cache_data
+def get_subcategorias(user_id, categoria_id=None):
+    """
+    Retorna subcategorias do usuário.
+    - Se categoria_id for passado, filtra por categoria.
+    - Caso contrário, traz todas.
+    """
+    if categoria_id is not None:
+        query = """
+            SELECT subcategoria_id, categoria_id, nome
+            FROM subcategorias
+            WHERE user_id = %s AND categoria_id = %s
+            ORDER BY nome
+        """
+        return _execute_query(query, (user_id, categoria_id), fetch='all')
+    else:
+        query = """
+            SELECT subcategoria_id, categoria_id, nome
+            FROM subcategorias
+            WHERE user_id = %s
+            ORDER BY nome
+        """
+        return _execute_query(query, (user_id,), fetch='all')
+
+
+def update_subcategoria(subcategoria_id, user_id, nome):
+    query = """
+        UPDATE subcategorias
+        SET nome = %s
+        WHERE subcategoria_id = %s AND user_id = %s
+    """
+    _execute_query(query, (nome, subcategoria_id, user_id), commit=True)
+    st.cache_data.clear()
+
+
+def delete_subcategoria(subcategoria_id, user_id):
+    query = "DELETE FROM subcategorias WHERE subcategoria_id = %s AND user_id = %s"
+    _execute_query(query, (subcategoria_id, user_id), commit=True)
+    st.cache_data.clear()
+
+def get_or_create_subcategoria(user_id, categoria_id, nome_subcategoria):
+    nome_clean = nome_subcategoria.strip().capitalize()
+
+    query_select = """
+        SELECT subcategoria_id, nome
+        FROM subcategorias
+        WHERE user_id = %s AND categoria_id = %s AND lower(nome) = %s
+    """
+    result = _execute_query(
+        query_select, (user_id, categoria_id, nome_clean.lower()), fetch='one'
+    )
+
+    if result:
+        return result[0]  # subcategoria_id
+
+    query_insert = """
+        INSERT INTO subcategorias (user_id, categoria_id, nome)
+        VALUES (%s, %s, %s)
+        RETURNING subcategoria_id
+    """
+    new_id = _execute_query(
+        query_insert, (user_id, categoria_id, nome_clean), fetch='one', commit=True
+    )[0]
+
+    st.cache_data.clear()
+    return new_id
+
+
 # -------- Receitas --------
 
 # Dicionário para calcular o delta da recorrência
@@ -1171,3 +1256,4 @@ def get_resultados_operacoes_normais_por_ativo(user_id):
     
 
     return output
+
