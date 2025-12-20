@@ -34,7 +34,6 @@ with st.form("form_nova_categoria"):
 st.markdown("---")
 st.markdown("### Adicionar Nova Subcategoria")
 
-# Carrega apenas categorias de despesa (pode adaptar para receita também, se quiser)
 categorias_despesa = database.get_categorias(user_id, "despesa")
 
 if not categorias_despesa:
@@ -43,12 +42,26 @@ else:
     cat_id_list = [c[0] for c in categorias_despesa]
     cat_nome_list = [c[1] for c in categorias_despesa]
 
+    # carrega TODAS subcategorias existentes do usuário
+    subcats_existentes = database.get_subcategorias(user_id)  # (sub_id, cat_id, nome)
+    opcoes_sub = sorted(list({s[2] for s in subcats_existentes})) if subcats_existentes else []
+
     with st.form("form_nova_subcategoria"):
         categoria_escolhida_nome = st.selectbox(
             "Categoria",
             options=cat_nome_list,
         )
-        nome_sub = st.text_input("Nome da subcategoria")
+
+        # se quiser só lista fixa:
+        # nome_sub = st.selectbox("Subcategoria", options=opcoes_sub)
+
+        # se quiser lista + opção de digitar nova:
+        nome_sub = st.selectbox(
+            "Subcategoria (existente ou nova)",
+            options=["<digitar nova>"] + opcoes_sub if opcoes_sub else ["<digitar nova>"],
+        )
+        if nome_sub == "<digitar nova>":
+            nome_sub = st.text_input("Nova subcategoria").strip()
 
         if st.form_submit_button("Adicionar Subcategoria"):
             if not nome_sub.strip():
@@ -200,6 +213,7 @@ with col2:
                     "Nenhuma categoria de despesa selecionada.",
                     icon="⚠️",
                 )
+
 
 
 
