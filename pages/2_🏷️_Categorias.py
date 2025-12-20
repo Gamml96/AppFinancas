@@ -30,8 +30,6 @@ with st.form("form_nova_categoria"):
             st.toast(f"Categoria '{nome}' adicionada!", icon="✅")
             st.rerun()
 
-st.markdown("---")
-
 # ===== FORMULÁRIO: NOVA SUBCATEGORIA =====
 st.markdown("---")
 st.markdown("### Adicionar Nova Subcategoria")
@@ -176,5 +174,6 @@ else:
                 st.rerun()
             else:
                 st.toast("Nenhuma subcategoria selecionada.", icon="⚠️")
+
 
 
