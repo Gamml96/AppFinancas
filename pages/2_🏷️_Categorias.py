@@ -5,31 +5,6 @@ import datetime
 import utils
 
 
-Para ficar tudo no mesmo editor de categorias de despesa, cada linha terá:
-
-Nome da categoria.
-
-Subcategoria (texto livre, opcional).
-
-Excluir.
-
-Abaixo está o código completo da página com essa lógica integrada apenas no bloco de despesas.
-​
-
-Código completo 2_🏷️_Categorias.py (subcategoria no editor de despesas)
-python
-import streamlit as st
-import database
-import pandas as pd
-import utils
-
-from database import (
-    get_subcategorias,
-    insert_subcategoria,
-    update_subcategoria,
-    delete_subcategoria,
-)
-
 # --- Guarda de Autenticação ---
 profile, user_id, username, credentials, authenticator = utils.check_authentication()
 
@@ -196,4 +171,5 @@ with col2:
                     "Nenhuma categoria de despesa selecionada.",
                     icon="⚠️",
                 )
+
 
