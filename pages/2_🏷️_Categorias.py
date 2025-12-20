@@ -4,8 +4,6 @@ import pandas as pd
 import datetime
 import utils
 
-# --- Guarda de Autenticação ---
-profile, user_id, username, credentials, authenticator = utils.check_authentication()
 
 # --- Guarda de Autenticação ---
 profile, user_id, username, credentials, authenticator = utils.check_authentication()
@@ -178,3 +176,4 @@ else:
                 st.rerun()
             else:
                 st.toast("Nenhuma subcategoria selecionada.", icon="⚠️")
+
