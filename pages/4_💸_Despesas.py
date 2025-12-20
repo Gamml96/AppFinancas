@@ -26,6 +26,8 @@ with tab_despesas:
 
     contas_dict = {conta[1]: conta[0] for conta in contas}
     categorias_list = [cat[1] for cat in categorias_despesa]
+    categorias_list = sorted([cat[1] for cat in categorias_despesa])
+
 
     with st.form("form_nova_despesa"):
         st.markdown("### Adicionar Nova Despesa")
@@ -340,5 +342,6 @@ with tab_simulacao:
             hide_index=True,
             use_container_width=True
         )
+
 
 
