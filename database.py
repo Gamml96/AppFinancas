@@ -337,22 +337,22 @@ def get_or_create_subcategoria(user_id, categoria_id, nome_subcategoria):
 
     st.cache_data.clear()
     return new_id
+    
 def get_despesas_por_subcategoria(user_id, data_inicio, data_fim):
     """
-    Retorna o total de despesas por subcategoria no período.
-    Pressupõe que a tabela despesas tem uma coluna 'subcategoria' (TEXT),
-    ou que você já grava o nome da subcategoria lá.
+    Versão provisória: agrupa por 'categoria' porque ainda não existe coluna subcategoria.
+    Quando a coluna subcategoria estiver criada/preenchida, troque categoria por subcategoria.
     """
     query = """
         SELECT
-            COALESCE(subcategoria, 'Sem subcategoria') AS subcategoria,
+            COALESCE(categoria, 'Sem categoria') AS subcategoria,
             SUM(valor) AS total
         FROM despesas
         WHERE user_id = %s
           AND data_vencimento >= %s
           AND data_vencimento <= %s
           AND valor < 0
-        GROUP BY COALESCE(subcategoria, 'Sem subcategoria')
+        GROUP BY COALESCE(categoria, 'Sem categoria')
         ORDER BY total ASC
     """
     return _execute_query(
@@ -360,6 +360,7 @@ def get_despesas_por_subcategoria(user_id, data_inicio, data_fim):
         (user_id, data_inicio, data_fim),
         fetch="all",
     )
+
 
 
 # -------- Receitas --------
@@ -1279,5 +1280,6 @@ def get_resultados_operacoes_normais_por_ativo(user_id):
     
 
     return output
+
 
 
