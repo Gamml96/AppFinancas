@@ -340,24 +340,45 @@ def get_or_create_subcategoria(user_id, categoria_id, nome_subcategoria):
     
 def get_despesas_por_subcategoria(user_id, data_inicio, data_fim):
     """
-    Versão provisória: agrupa por 'categoria' porque ainda não existe coluna subcategoria.
-    Quando a coluna subcategoria estiver criada/preenchida, troque categoria por subcategoria.
+    Retorna total de despesas por 'subcategoria principal' de cada categoria.
+    Pressupõe que cada categoria tem no máximo UMA subcategoria.
     """
     query = """
+        WITH despesas_cat AS (
+            SELECT
+                d.categoria AS categoria_nome,
+                SUM(d.valor) AS total_cat
+            FROM despesas d
+            WHERE d.user_id = %s
+              AND d.data_vencimento >= %s
+              AND d.data_vencimento <= %s
+              AND d.valor < 0
+            GROUP BY d.categoria
+        ),
+        cat_sub AS (
+            -- mapeia categoria -> uma única subcategoria (se existir)
+            SELECT
+                c.nome AS categoria_nome,
+                COALESCE(s.nome, 'Sem subcategoria') AS subcategoria_nome
+            FROM categorias c
+            LEFT JOIN subcategorias s
+                   ON s.categoria_id = c.categoria_id
+                  AND s.user_id = c.user_id
+            WHERE c.user_id = %s
+              AND c.tipo = 'despesa'
+        )
         SELECT
-            COALESCE(categoria, 'Sem categoria') AS subcategoria,
-            SUM(valor) AS total
-        FROM despesas
-        WHERE user_id = %s
-          AND data_vencimento >= %s
-          AND data_vencimento <= %s
-          AND valor < 0
-        GROUP BY COALESCE(categoria, 'Sem categoria')
-        ORDER BY total ASC
+            cs.subcategoria_nome AS subcategoria,
+            SUM(dc.total_cat) AS total
+        FROM despesas_cat dc
+        JOIN cat_sub cs
+          ON dc.categoria_nome = cs.categoria_nome
+        GROUP BY cs.subcategoria_nome
+        ORDER BY total ASC;
     """
     return _execute_query(
         query,
-        (user_id, data_inicio, data_fim),
+        (user_id, data_inicio, data_fim, user_id),
         fetch="all",
     )
 
@@ -1280,6 +1301,7 @@ def get_resultados_operacoes_normais_por_ativo(user_id):
     
 
     return output
+
 
 
 
