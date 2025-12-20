@@ -5,6 +5,31 @@ import datetime
 import utils
 
 
+Para ficar tudo no mesmo editor de categorias de despesa, cada linha terá:
+
+Nome da categoria.
+
+Subcategoria (texto livre, opcional).
+
+Excluir.
+
+Abaixo está o código completo da página com essa lógica integrada apenas no bloco de despesas.
+​
+
+Código completo 2_🏷️_Categorias.py (subcategoria no editor de despesas)
+python
+import streamlit as st
+import database
+import pandas as pd
+import utils
+
+from database import (
+    get_subcategorias,
+    insert_subcategoria,
+    update_subcategoria,
+    delete_subcategoria,
+)
+
 # --- Guarda de Autenticação ---
 profile, user_id, username, credentials, authenticator = utils.check_authentication()
 
@@ -36,21 +61,20 @@ st.markdown("### Categorias")
 
 col1, col2 = st.columns(2)
 
-for tipo, col in [("receita", col1), ("despesa", col2)]:
-    with col:
-        st.markdown(f"#### Categorias de {tipo.capitalize()}")
-        categorias = database.get_categorias(user_id, tipo)
+# --- Categorias de RECEITA (sem subcategoria) ---
+with col1:
+    st.markdown("#### Categorias de Receita")
+    categorias_receita = database.get_categorias(user_id, "receita")
 
-        if not categorias:
-            st.info(f"Nenhuma categoria de {tipo} cadastrada.")
-            continue
+    if not categorias_receita:
+        st.info("Nenhuma categoria de receita cadastrada.")
+    else:
+        df_rec = pd.DataFrame(categorias_receita, columns=["ID", "Nome"])
+        df_rec["Excluir"] = False
 
-        df = pd.DataFrame(categorias, columns=["ID", "Nome"])
-        df["Excluir"] = False
-
-        edited_df = st.data_editor(
-            df,
-            key=f"editor_{tipo}",
+        edited_rec = st.data_editor(
+            df_rec,
+            key="editor_receita",
             hide_index=True,
             use_container_width=True,
             column_config={
@@ -59,118 +83,117 @@ for tipo, col in [("receita", col1), ("despesa", col2)]:
             },
         )
 
-        if st.button(f"Salvar {tipo.capitalize()}", key=f"save_{tipo}"):
-            for _, row in edited_df.iterrows():
+        if st.button("Salvar Receita", key="save_receita"):
+            for _, row in edited_rec.iterrows():
                 database.update_categoria(int(row["ID"]), user_id, row["Nome"])
-            st.toast(f"Categorias de {tipo} atualizadas!", icon="✅")
+            st.toast("Categorias de receita atualizadas!", icon="✅")
             st.rerun()
 
-        if st.button(f"Excluir de {tipo.capitalize()}", key=f"delete_{tipo}"):
-            selected = edited_df[edited_df["Excluir"]]
+        if st.button("Excluir de Receita", key="delete_receita"):
+            selected = edited_rec[edited_rec["Excluir"]]
             if not selected.empty:
                 for _, row in selected.iterrows():
                     database.delete_categoria(int(row["ID"]), user_id)
                 st.toast(
-                    f"{len(selected)} categoria(s) de {tipo} excluída(s)!",
+                    f"{len(selected)} categoria(s) de receita excluída(s)!",
                     icon="🗑️",
                 )
                 st.rerun()
             else:
                 st.toast(
-                    f"Nenhuma categoria de {tipo} selecionada.",
+                    "Nenhuma categoria de receita selecionada.",
                     icon="⚠️",
                 )
 
-# ===== CATEGORIAS + SUBCATEGORIAS NO MESMO DATAFRAME =====
-st.markdown("---")
-st.markdown("### Categorias e Subcategorias")
+# --- Categorias de DESPESA (com subcategoria no mesmo editor) ---
+with col2:
+    st.markdown("#### Categorias de Despesa")
+    categorias_despesa = database.get_categorias(user_id, "despesa")
 
-# Carrega todas as categorias (receita + despesa)
-categorias_receita = database.get_categorias(user_id, "receita")
-categorias_despesa = database.get_categorias(user_id, "despesa")
-todas_categorias = categorias_receita + categorias_despesa  # [(id, nome), ...]
-
-if not todas_categorias:
-    st.info("Cadastre categorias para gerenciar subcategorias.")
-else:
-    # Mapas de id <-> nome
-    cat_id_to_nome = {c[0]: c[1] for c in todas_categorias}
-    cat_nome_to_id = {v: k for k, v in cat_id_to_nome.items()}
-    lista_nomes_categorias = list(cat_nome_to_id.keys())
-
-    # Carrega subcategorias existentes
-    subcats = get_subcategorias(user_id)  # (subcat_id, categoria_id, nome)
-
-    if subcats:
-        df_sub = pd.DataFrame(
-            subcats,
-            columns=["Subcat ID", "Categoria ID", "Subcategoria"],
-        )
-        df_sub["Categoria"] = df_sub["Categoria ID"].map(cat_id_to_nome)
+    if not categorias_despesa:
+        st.info("Nenhuma categoria de despesa cadastrada.")
     else:
-        # DataFrame vazio para permitir criação de novas subcategorias direto no editor
-        df_sub = pd.DataFrame(
-            columns=["Subcat ID", "Categoria ID", "Subcategoria", "Categoria"]
+        # DF base de categorias de despesa
+        df_desp = pd.DataFrame(categorias_despesa, columns=["ID", "Nome"])
+
+        # Carrega subcategorias e monta um mapeamento categoria_id -> lista de subcats
+        subcats = get_subcategorias(user_id)  # (subcat_id, categoria_id, nome)
+        # Para simplicidade no editor: vamos exibir apenas UMA subcategoria por linha.
+        # (Se houver várias no banco, pegamos a primeira.)
+        catid_to_first_sub = {}
+        subcatid_by_catid = {}
+        for sub_id, cat_id, nome_sub in subcats:
+            if cat_id not in catid_to_first_sub:
+                catid_to_first_sub[cat_id] = nome_sub
+                subcatid_by_catid[cat_id] = sub_id
+
+        df_desp["Subcategoria"] = df_desp["ID"].map(catid_to_first_sub).fillna("")
+        df_desp["Subcat ID"] = df_desp["ID"].map(subcatid_by_catid)
+        df_desp["Excluir"] = False
+
+        edited_desp = st.data_editor(
+            df_desp,
+            key="editor_despesa",
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "ID": None,
+                "Subcat ID": None,
+                "Nome": st.column_config.TextColumn(required=True),
+                "Subcategoria": st.column_config.TextColumn(
+                    help="Opcional. Se informado, será vinculada como subcategoria desta categoria."
+                ),
+            },
         )
 
-    df_sub["Excluir"] = False
+        if st.button("Salvar Despesa", key="save_despesa"):
+            for _, row in edited_desp.iterrows():
+                categoria_id = int(row["ID"])
+                nome_cat = str(row["Nome"]).strip()
+                nome_sub = str(row.get("Subcategoria", "")).strip()
+                subcat_id = row.get("Subcat ID")
 
-    edited_sub = st.data_editor(
-        df_sub,
-        hide_index=True,
-        use_container_width=True,
-        num_rows="dynamic",  # permite adicionar/remover linhas
-        column_config={
-            "Subcat ID": None,
-            "Categoria ID": None,
-            "Categoria": st.column_config.SelectboxColumn(
-                "Categoria",
-                options=lista_nomes_categorias,
-                required=True,
-            ),
-            "Subcategoria": st.column_config.TextColumn(required=True),
-        },
-        key="editor_categorias_sub",
-    )
+                # Atualiza nome da categoria
+                database.update_categoria(categoria_id, user_id, nome_cat)
 
-    col_s1, col_s2 = st.columns(2)
+                # Gerencia subcategoria associada (apenas uma por categoria nesse modelo)
+                if nome_sub:
+                    # Se já existe subcategoria, atualiza; senão, cria
+                    if pd.notna(subcat_id):
+                        update_subcategoria(int(subcat_id), user_id, nome_sub)
+                    else:
+                        insert_subcategoria(user_id, categoria_id, nome_sub)
+                else:
+                    # Se o campo foi deixado vazio e existia subcategoria, remover
+                    if pd.notna(subcat_id):
+                        delete_subcategoria(int(subcat_id), user_id)
 
-    if col_s1.button("Salvar Categorias/Subcategorias"):
-        for _, row in edited_sub.iterrows():
-            # Se marcada para exclusão
-            if row.get("Excluir", False):
-                if pd.notna(row.get("Subcat ID")):
-                    delete_subcategoria(int(row["Subcat ID"]), user_id)
-                continue
-
-            nome_cat = str(row.get("Categoria", "")).strip()
-            nome_sub = str(row.get("Subcategoria", "")).strip()
-
-            if not nome_cat or not nome_sub:
-                continue
-
-            categoria_id = cat_nome_to_id.get(nome_cat)
-
-            # Nova subcategoria (linha nova no editor)
-            if pd.isna(row.get("Subcat ID")) or row.get("Subcat ID") == "":
-                insert_subcategoria(user_id, categoria_id, nome_sub)
-            else:
-                # Atualizar subcategoria existente
-                update_subcategoria(int(row["Subcat ID"]), user_id, nome_sub)
-
-        st.toast("Categorias e subcategorias salvas!", icon="✅")
-        st.rerun()
-
-    if col_s2.button("Excluir Subcategorias Marcadas"):
-        to_delete = edited_sub[
-            (edited_sub["Excluir"] == True) & edited_sub["Subcat ID"].notna()
-        ]
-        if not to_delete.empty:
-            for _, row in to_delete.iterrows():
-                delete_subcategoria(int(row["Subcat ID"]), user_id)
-            st.toast(f"{len(to_delete)} subcategoria(s) excluída(s)!", icon="🗑️")
+            st.toast("Categorias de despesa e subcategorias salvas!", icon="✅")
             st.rerun()
-        else:
-            st.toast("Nenhuma subcategoria marcada para exclusão.", icon="⚠️")
 
+        if st.button("Excluir de Despesa", key="delete_despesa"):
+            selected = edited_desp[edited_desp["Excluir"]]
+            if not selected.empty:
+                for _, row in selected.iterrows():
+                    categoria_id = int(row["ID"])
+                    # Apaga também possíveis subcategorias ligadas a essa categoria
+                    # (se o FK estiver com ON DELETE CASCADE, pode até pular isso)
+                    subcats_cat = [
+                        s for s in subcats if s[1] == categoria_id
+                    ]  # (sub_id, cat_id, nome)
+                    for sub_id, _, _ in subcats_cat:
+                        delete_subcategoria(int(sub_id), user_id)
+
+                    database.delete_categoria(categoria_id, user_id)
+
+                st.toast(
+                    f"{len(selected)} categoria(s) de despesa excluída(s)!",
+                    icon="🗑️",
+                )
+                st.rerun()
+            else:
+                st.toast(
+                    "Nenhuma categoria de despesa selecionada.",
+                    icon="⚠️",
+                )
 
