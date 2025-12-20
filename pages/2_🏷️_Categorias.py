@@ -32,6 +32,42 @@ with st.form("form_nova_categoria"):
 
 st.markdown("---")
 
+# ===== FORMULÁRIO: NOVA SUBCATEGORIA =====
+st.markdown("---")
+st.markdown("### Adicionar Nova Subcategoria")
+
+categorias_receita = database.get_categorias(user_id, "receita")
+categorias_despesa = database.get_categorias(user_id, "despesa")
+
+todas_categorias = [
+    (cat[0], f"{cat[1]} (Receita)") for cat in categorias_receita
+] + [
+    (cat[0], f"{cat[1]} (Despesa)") for cat in categorias_despesa
+]
+
+if not todas_categorias:
+    st.info("Cadastre uma categoria antes de criar subcategorias.")
+else:
+    cat_id_list = [c[0] for c in todas_categorias]
+    cat_label_list = [c[1] for c in todas_categorias]
+
+    with st.form("form_nova_subcategoria"):
+        categoria_label = st.selectbox(
+            "Categoria pai",
+            options=cat_label_list,
+        )
+        nome_sub = st.text_input("Nome da subcategoria")
+
+        if st.form_submit_button("Adicionar Subcategoria"):
+            if not nome_sub.strip():
+                st.toast("O nome da subcategoria é obrigatório.", icon="⚠️")
+            else:
+                idx = cat_label_list.index(categoria_label)
+                categoria_id_escolhida = cat_id_list[idx]
+                insert_subcategoria(user_id, categoria_id_escolhida, nome_sub.strip())
+                st.toast(f"Subcategoria '{nome_sub}' adicionada!", icon="✅")
+                st.rerun()
+
 # ===== LISTAGEM / EDIÇÃO / EXCLUSÃO DE CATEGORIAS =====
 col1, col2 = st.columns(2)
 
@@ -79,42 +115,6 @@ for tipo, col in [("receita", col1), ("despesa", col2)]:
                     f"Nenhuma categoria de {tipo} selecionada.",
                     icon="⚠️",
                 )
-
-# ===== FORMULÁRIO: NOVA SUBCATEGORIA =====
-st.markdown("---")
-st.markdown("### Adicionar Nova Subcategoria")
-
-categorias_receita = database.get_categorias(user_id, "receita")
-categorias_despesa = database.get_categorias(user_id, "despesa")
-
-todas_categorias = [
-    (cat[0], f"{cat[1]} (Receita)") for cat in categorias_receita
-] + [
-    (cat[0], f"{cat[1]} (Despesa)") for cat in categorias_despesa
-]
-
-if not todas_categorias:
-    st.info("Cadastre uma categoria antes de criar subcategorias.")
-else:
-    cat_id_list = [c[0] for c in todas_categorias]
-    cat_label_list = [c[1] for c in todas_categorias]
-
-    with st.form("form_nova_subcategoria"):
-        categoria_label = st.selectbox(
-            "Categoria pai",
-            options=cat_label_list,
-        )
-        nome_sub = st.text_input("Nome da subcategoria")
-
-        if st.form_submit_button("Adicionar Subcategoria"):
-            if not nome_sub.strip():
-                st.toast("O nome da subcategoria é obrigatório.", icon="⚠️")
-            else:
-                idx = cat_label_list.index(categoria_label)
-                categoria_id_escolhida = cat_id_list[idx]
-                insert_subcategoria(user_id, categoria_id_escolhida, nome_sub.strip())
-                st.toast(f"Subcategoria '{nome_sub}' adicionada!", icon="✅")
-                st.rerun()
 
 # ===== LISTAGEM / EDIÇÃO / EXCLUSÃO DE SUBCATEGORIAS =====
 st.markdown("---")
@@ -176,4 +176,5 @@ else:
                 st.rerun()
             else:
                 st.toast("Nenhuma subcategoria selecionada.", icon="⚠️")
+
 
