@@ -56,7 +56,7 @@ else:
             else:
                 idx = cat_nome_list.index(categoria_escolhida_nome)
                 categoria_id = cat_id_list[idx]
-                insert_subcategoria(user_id, categoria_id, nome_sub.strip())
+                database.insert_subcategoria(user_id, categoria_id, nome_sub.strip())
                 st.toast("Subcategoria adicionada!", icon="✅")
                 st.rerun()
 # ===== LISTAGEM / EDIÇÃO / EXCLUSÃO DE CATEGORIAS =====
@@ -121,7 +121,7 @@ with col2:
         df_desp = pd.DataFrame(categorias_despesa, columns=["ID", "Nome"])
 
         # Carrega subcategorias e monta um mapeamento categoria_id -> lista de subcats
-        subcats = get_subcategorias(user_id)  # (subcat_id, categoria_id, nome)
+        subcats = database.get_subcategorias(user_id)  # (subcat_id, categoria_id, nome)
         # Para simplicidade no editor: vamos exibir apenas UMA subcategoria por linha.
         # (Se houver várias no banco, pegamos a primeira.)
         catid_to_first_sub = {}
@@ -164,13 +164,13 @@ with col2:
                 if nome_sub:
                     # Se já existe subcategoria, atualiza; senão, cria
                     if pd.notna(subcat_id):
-                        update_subcategoria(int(subcat_id), user_id, nome_sub)
+                        database.update_subcategoria(int(subcat_id), user_id, nome_sub)
                     else:
-                        insert_subcategoria(user_id, categoria_id, nome_sub)
+                        database.insert_subcategoria(user_id, categoria_id, nome_sub)
                 else:
                     # Se o campo foi deixado vazio e existia subcategoria, remover
                     if pd.notna(subcat_id):
-                        delete_subcategoria(int(subcat_id), user_id)
+                        database.delete_subcategoria(int(subcat_id), user_id)
 
             st.toast("Categorias de despesa e subcategorias salvas!", icon="✅")
             st.rerun()
@@ -186,7 +186,7 @@ with col2:
                         s for s in subcats if s[1] == categoria_id
                     ]  # (sub_id, cat_id, nome)
                     for sub_id, _, _ in subcats_cat:
-                        delete_subcategoria(int(sub_id), user_id)
+                        database.delete_subcategoria(int(sub_id), user_id)
 
                     database.delete_categoria(categoria_id, user_id)
 
@@ -200,6 +200,7 @@ with col2:
                     "Nenhuma categoria de despesa selecionada.",
                     icon="⚠️",
                 )
+
 
 
 
