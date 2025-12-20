@@ -137,7 +137,7 @@ else:
 
     if col_s1.button("Salvar Categorias/Subcategorias"):
         for _, row in edited_sub.iterrows():
-            # Excluir marcadas
+            # Se marcada para exclusão
             if row.get("Excluir", False):
                 if pd.notna(row.get("Subcat ID")):
                     delete_subcategoria(int(row["Subcat ID"]), user_id)
@@ -151,7 +151,7 @@ else:
 
             categoria_id = cat_nome_to_id.get(nome_cat)
 
-            # Nova subcategoria
+            # Nova subcategoria (linha nova no editor)
             if pd.isna(row.get("Subcat ID")) or row.get("Subcat ID") == "":
                 insert_subcategoria(user_id, categoria_id, nome_sub)
             else:
@@ -172,6 +172,5 @@ else:
             st.rerun()
         else:
             st.toast("Nenhuma subcategoria marcada para exclusão.", icon="⚠️")
-
 
 
