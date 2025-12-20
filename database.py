@@ -13,7 +13,7 @@ import time
 # --- FUNÇÃO CENTRAL DE CONEXÃO ---
 def _get_db_connection():
     """
-    Cria uma conexão com o banco de dados PostgreSQL usando a URI de pooling,
+    Cria uma conexão com o banco de dados Supabase usando a URI de pooling,
     que é o método mais robusto para ambientes como o Streamlit Cloud.
     """
     try:
@@ -1169,4 +1169,5 @@ def get_resultados_operacoes_normais_por_ativo(user_id):
     # Ordena a lista do maior para o menor resultado
     output.sort(key=lambda x: x[1], reverse=True)
     
+
     return output
