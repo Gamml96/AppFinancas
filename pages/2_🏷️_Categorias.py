@@ -52,16 +52,15 @@ else:
             options=cat_nome_list,
         )
 
-        # se quiser só lista fixa:
-        # nome_sub = st.selectbox("Subcategoria", options=opcoes_sub)
-
-        # se quiser lista + opção de digitar nova:
-        nome_sub = st.selectbox(
+        nome_sub_sel = st.selectbox(
             "Subcategoria (existente ou nova)",
             options=["<digitar nova>"] + opcoes_sub if opcoes_sub else ["<digitar nova>"],
         )
-        if nome_sub == "<digitar nova>":
+
+        if nome_sub_sel == "<digitar nova>":
             nome_sub = st.text_input("Nova subcategoria").strip()
+        else:
+            nome_sub = nome_sub_sel.strip()
 
         if st.form_submit_button("Adicionar Subcategoria"):
             if not nome_sub.strip():
@@ -72,6 +71,7 @@ else:
                 database.insert_subcategoria(user_id, categoria_id, nome_sub.strip())
                 st.toast("Subcategoria adicionada!", icon="✅")
                 st.rerun()
+
 # ===== LISTAGEM / EDIÇÃO / EXCLUSÃO DE CATEGORIAS =====
 st.markdown("---")
 st.markdown("### Categorias")
@@ -122,7 +122,7 @@ with col1:
                     icon="⚠️",
                 )
 
-# --- Categorias de DESPESA (com subcategoria no mesmo editor) ---
+# --- Categorias de DESPESA (com subcategoria no mesmo editor, em listbox) ---
 with col2:
     st.markdown("#### Categorias de Despesa")
     categorias_despesa = database.get_categorias(user_id, "despesa")
@@ -133,10 +133,9 @@ with col2:
         # DF base de categorias de despesa
         df_desp = pd.DataFrame(categorias_despesa, columns=["ID", "Nome"])
 
-        # Carrega subcategorias e monta um mapeamento categoria_id -> lista de subcats
+        # Carrega subcategorias e monta um mapeamento categoria_id -> primeira subcategoria
         subcats = database.get_subcategorias(user_id)  # (subcat_id, categoria_id, nome)
-        # Para simplicidade no editor: vamos exibir apenas UMA subcategoria por linha.
-        # (Se houver várias no banco, pegamos a primeira.)
+
         catid_to_first_sub = {}
         subcatid_by_catid = {}
         for sub_id, cat_id, nome_sub in subcats:
@@ -148,6 +147,10 @@ with col2:
         df_desp["Subcat ID"] = df_desp["ID"].map(subcatid_by_catid)
         df_desp["Excluir"] = False
 
+        # opções para o selectbox (todas subcategorias já usadas em qualquer categoria)
+        opcoes_sub = sorted(list({s[2] for s in subcats})) if subcats else []
+        opcoes_sub_with_blank = [""] + opcoes_sub  # "" = sem subcategoria
+
         edited_desp = st.data_editor(
             df_desp,
             key="editor_despesa",
@@ -157,8 +160,10 @@ with col2:
                 "ID": None,
                 "Subcat ID": None,
                 "Nome": st.column_config.TextColumn(required=True),
-                "Subcategoria": st.column_config.TextColumn(
-                    help="Opcional. Se informado, será vinculada como subcategoria desta categoria."
+                "Subcategoria": st.column_config.SelectboxColumn(
+                    "Subcategoria",
+                    options=opcoes_sub_with_blank,
+                    help="Escolha uma subcategoria existente ou deixe vazio.",
                 ),
             },
         )
@@ -194,10 +199,7 @@ with col2:
                 for _, row in selected.iterrows():
                     categoria_id = int(row["ID"])
                     # Apaga também possíveis subcategorias ligadas a essa categoria
-                    # (se o FK estiver com ON DELETE CASCADE, pode até pular isso)
-                    subcats_cat = [
-                        s for s in subcats if s[1] == categoria_id
-                    ]  # (sub_id, cat_id, nome)
+                    subcats_cat = [s for s in subcats if s[1] == categoria_id]
                     for sub_id, _, _ in subcats_cat:
                         database.delete_subcategoria(int(sub_id), user_id)
 
@@ -213,8 +215,5 @@ with col2:
                     "Nenhuma categoria de despesa selecionada.",
                     icon="⚠️",
                 )
-
-
-
 
 
