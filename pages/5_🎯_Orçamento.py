@@ -1,67 +1,49 @@
-import streamlit as st
-import database
-import pandas as pd
-import utils
+st.markdown("---")
+st.markdown("### Distribuição Percentual por Categoria")
 
-# --- Guarda de Autenticação ---
-profile, user_id, username, credentials, authenticator = utils.check_authentication()
-
-st.title("Definir Orçamento Mensal por Subcategoria")
-st.info("Defina um limite de gastos apenas para suas subcategorias de despesa. Deixe em 0 para não ter limite.")
-
-# 1. Buscar TODAS as subcategorias do usuário
-#    Esperado de get_subcategorias: (subcategoria_id, categoria_id, nome)
-subcats = database.get_subcategorias(user_id)
-
-if not subcats:
-    st.warning("Você precisa cadastrar subcategorias de despesa antes de poder definir um orçamento.")
+# Buscar categorias de despesa
+categorias_despesa = database.get_categorias(user_id, "despesa")
+if not categorias_despesa:
+    st.info("Cadastre categorias de despesa para definir percentuais.")
 else:
-    # 2. Buscar orçamentos já definidos (chave = nome da subcategoria)
-    #    get_orcamentos retorna algo como: [(chave, limite), ...]
-    orcamentos_definidos = database.get_orcamentos(user_id)
-    orcamentos_dict = {orc[0]: orc[1] for orc in orcamentos_definidos}
+    # Exemplo: se já tiver uma tabela de percentuais, carregue aqui
+    # orc_percentuais = database.get_orcamentos_percentuais(user_id)  # [(categoria, percentual), ...]
+    # percentuais_dict = {o[0]: o[1] for o in orc_percentuais}
+    percentuais_dict = {}  # se ainda não tiver no banco
 
-    # 3. Montar lista de subcategorias ÚNICAS pelo nome
-    nomes_unicos = sorted({sub_nome for _, _, sub_nome in subcats})
-
-    dados_editor = []
-    for sub_nome in nomes_unicos:
-        chave = sub_nome  # orçamento só por subcategoria (nome)
-        limite_atual = orcamentos_dict.get(chave, 0.0)
-        dados_editor.append(
+    dados_cat = []
+    for cat_id, cat_nome in categorias_despesa:
+        pct_atual = percentuais_dict.get(cat_nome, 0.0)
+        dados_cat.append(
             {
-                "Subcategoria": sub_nome,
-                "Limite Mensal": limite_atual,
+                "Categoria": cat_nome,
+                "Percentual Planejado": pct_atual,
             }
         )
 
-    df_orcamento = pd.DataFrame(dados_editor)
+    df_pct = pd.DataFrame(dados_cat)
 
-    st.markdown("### Orçamento por Subcategoria")
-
-    edited_df = st.data_editor(
-        df_orcamento,
+    edited_pct = st.data_editor(
+        df_pct,
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Subcategoria": st.column_config.TextColumn(
-                "Subcategoria",
-                disabled=True,
-            ),
-            "Limite Mensal": st.column_config.NumberColumn(
-                "Limite (R$)",
-                format="%.2f",
+            "Categoria": st.column_config.TextColumn(disabled=True),
+            "Percentual Planejado": st.column_config.NumberColumn(
+                "Percentual (%)",
                 min_value=0.0,
+                max_value=100.0,
+                format="%.1f",
+                help="Percentual da despesa total que você espera gastar nessa categoria.",
             ),
         },
-        key="editor_orcamento_sub",
+        key="editor_orcamento_pct",
     )
 
-    if st.button("Salvar Orçamentos", type="primary"):
-        for _, row in edited_df.iterrows():
-            sub_nome = row["Subcategoria"]
-            limite = float(row["Limite Mensal"])
-            # Salva orçamento apenas por subcategoria (nome como chave)
-            database.set_orcamento(user_id, sub_nome, limite)
-        st.success("Orçamentos por subcategoria salvos com sucesso!")
-        st.rerun()
+    if st.button("Salvar Percentuais por Categoria"):
+        for _, row in edited_pct.iterrows():
+            cat_nome = row["Categoria"]
+            pct = float(row["Percentual Planejado"])
+            # aqui chamaria algo como:
+            # database.set_orcamento_percentual(user_id, cat_nome, pct)
+        st.success("Percentuais planejados por categoria salvos!")
